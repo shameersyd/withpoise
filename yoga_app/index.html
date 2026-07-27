@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0a1a">
+  <meta name="description" content="Real-time yoga pose tracker with form correction">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <title>Yoga Pose Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0a0a1a;
+      --bg-card: rgba(20, 20, 45, 0.85);
+      --bg-glass: rgba(15, 15, 35, 0.75);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --green: #00e676;
+      --red: #ff5252;
+      --yellow: #ffd740;
+      --cyan: #00e5ff;
+      --purple: #b388ff;
+      --text-primary: #f0f0f5;
+      --text-secondary: rgba(240, 240, 245, 0.6);
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg-primary);
+      font-family: var(--font);
+      color: var(--text-primary);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Screens ── */
+    .screen { position: fixed; inset: 0; display: none; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── Loading Screen ── */
+    #screen-loading {
+      align-items: center; justify-content: center;
+      background: var(--bg-primary);
+    }
+    .loader-ring {
+      width: 64px; height: 64px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text {
+      margin-top: 20px; font-size: 14px; font-weight: 400;
+      color: var(--text-secondary); text-align: center; line-height: 1.6;
+    }
+    .loader-text .status { color: var(--cyan); font-weight: 500; }
+
+    /* ── Pose Selection Screen ── */
+    #screen-select {
+      background: var(--bg-primary);
+      overflow-y: auto;
+      padding: 0 20px;
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    .select-header {
+      text-align: center;
+      padding: 30px 0 10px;
+    }
+    .select-header h1 {
+      font-size: 28px; font-weight: 800;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .select-header p {
+      font-size: 14px; color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    .pose-grid {
+      display: flex; flex-direction: column; gap: 14px;
+      padding: 20px 0;
+    }
+
+    .pose-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      padding: 20px;
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .pose-card:active { transform: scale(0.97); border-color: var(--cyan); }
+
+    .pose-card-emoji {
+      font-size: 40px;
+      width: 60px; height: 60px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.05);
+      border-radius: 14px;
+      flex-shrink: 0;
+    }
+    .pose-card-info { flex: 1; }
+    .pose-card-info h3 {
+      font-size: 16px; font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .pose-card-info .sanskrit {
+      font-size: 12px; color: var(--purple);
+      font-weight: 500; margin-bottom: 6px;
+    }
+    .pose-card-info p {
+      font-size: 13px; color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .pose-card-arrow {
+      font-size: 20px; color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    /* ── Guide Screen ── */
+    #screen-guide {
+      background: var(--bg-primary);
+      overflow-y: auto;
+      padding: 0 24px;
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+
+    .guide-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 14px; font-weight: 500;
+      color: var(--cyan);
+      background: none; border: none;
+      cursor: pointer; padding: 10px 0;
+    }
+
+    .guide-hero {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .guide-hero .emoji { font-size: 72px; margin-bottom: 16px; display: block; }
+    .guide-hero h2 { font-size: 26px; font-weight: 800; }
+    .guide-hero .sanskrit {
+      font-size: 14px; color: var(--purple);
+      font-weight: 500; margin-top: 4px;
+    }
+
+    /* ── Demo Figure ── */
+    .demo-stage {
+      position: relative;
+      background: radial-gradient(ellipse at 50% 40%, rgba(0,229,255,0.07), rgba(255,255,255,0.02));
+      border: 1px solid var(--border-glass);
+      border-radius: 20px;
+      padding: 14px 14px 12px;
+    }
+    #guide-canvas {
+      display: block; width: 100%; height: 280px;
+    }
+    .demo-caption {
+      min-height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      font-size: 14px; line-height: 1.45;
+      color: var(--text-primary);
+      padding: 4px 4px 10px;
+    }
+    .demo-caption b { color: var(--cyan); font-weight: 600; }
+    .demo-controls {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    .demo-dots { display: flex; gap: 6px; flex: 1; justify-content: center; }
+    .demo-dot {
+      width: 6px; height: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.2);
+      transition: width 0.25s ease, background 0.25s ease;
+    }
+    .demo-dot.active { width: 20px; background: var(--cyan); }
+    .demo-btn {
+      width: 34px; height: 34px; flex-shrink: 0;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary); font-size: 15px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-family: var(--font);
+    }
+    .demo-btn:active { background: rgba(255,255,255,0.16); }
+
+    .guide-section {
+      margin: 20px 0;
+    }
+    .guide-section h4 {
+      font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--cyan); margin-bottom: 14px;
+    }
+
+    .guide-steps {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .guide-step {
+      display: flex; gap: 14px; align-items: flex-start;
+      cursor: pointer;
+      border-radius: 10px;
+      padding: 4px 8px; margin: -4px -8px;
+      transition: background 0.25s ease;
+    }
+    .guide-step.active { background: rgba(0, 229, 255, 0.08); }
+    .step-number {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(0, 229, 255, 0.12);
+      color: var(--cyan);
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+    .guide-step.active .step-number { background: var(--cyan); color: #05121a; }
+    .step-text {
+      font-size: 15px; line-height: 1.5;
+      color: var(--text-secondary);
+      padding-top: 3px;
+      transition: color 0.25s ease;
+    }
+    .guide-step.active .step-text { color: var(--text-primary); }
+
+    .guide-tips {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .guide-tip {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 14px; color: var(--text-secondary);
+    }
+    .tip-icon { font-size: 16px; flex-shrink: 0; }
+
+    .btn-begin {
+      display: block;
+      width: 100%;
+      padding: 18px;
+      margin: 30px 0;
+      border: none; border-radius: 14px;
+      background: linear-gradient(135deg, var(--cyan), #0091ea);
+      color: #fff;
+      font-family: var(--font);
+      font-size: 17px; font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      letter-spacing: 0.5px;
+    }
+    .btn-begin:active { transform: scale(0.97); opacity: 0.9; }
+
+    /* ── Tracking Screen ── */
+    #screen-track {
+      background: #000;
+    }
+
+    #video {
+      position: absolute;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #canvas {
+      position: absolute;
+      width: 100%; height: 100%;
+      transform: scaleX(-1);
+    }
+
+    .perfect-glow {
+      position: absolute; inset: 0;
+      border: 3px solid var(--green);
+      opacity: 0; pointer-events: none; z-index: 5;
+      transition: opacity 0.5s ease;
+    }
+    .perfect-glow.visible {
+      opacity: 1;
+      box-shadow: inset 0 0 40px rgba(0, 230, 118, 0.15);
+    }
+
+    #top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      z-index: 10;
+    }
+
+    #score-container {
+      position: relative;
+      width: 72px; height: 72px;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    #score-container.visible { opacity: 1; }
+    #score-ring { transform: rotate(-90deg); }
+    #score-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 4; }
+    #score-arc { fill: none; stroke-width: 4.5; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease, stroke 0.4s ease; }
+    #score-text {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; transition: color 0.4s ease;
+    }
+
+    .icon-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      color: var(--text-primary); font-size: 20px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .icon-btn:active { background: rgba(255,255,255,0.15); }
+
+    .top-btn-group { display: flex; gap: 10px; }
+
+    /* Pose name + live score, grouped so neither collides with the skeleton */
+    #status-card {
+      position: absolute;
+      top: 92px; left: 50%; transform: translateX(-50%);
+      padding: 9px 24px 12px; border-radius: 20px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      text-align: center; min-width: 190px;
+      z-index: 10; pointer-events: none;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    #status-card.visible { opacity: 1; }
+
+    #pose-badge {
+      font-size: 15px; font-weight: 600;
+      white-space: nowrap;
+      color: var(--text-secondary);
+    }
+    #score-value {
+      margin-top: 2px;
+      font-size: 38px; font-weight: 800; line-height: 1.1;
+      transition: color 0.3s ease;
+    }
+    #score-label {
+      margin-top: 2px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 1.8px; text-transform: uppercase;
+      transition: color 0.3s ease;
+    }
+    #score-detail {
+      margin-top: 3px;
+      font-size: 11px; font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    #corrections-panel {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 16px;
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(10,10,26,0.92) 60%, transparent);
+      z-index: 10;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #corrections-panel.visible { transform: translateY(0); }
+    #corrections-panel h3 {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1.2px;
+      color: var(--yellow); margin-bottom: 10px;
+    }
+    .correction-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; font-size: 14px; font-weight: 400;
+      color: var(--text-primary);
+      animation: slideIn 0.3s ease forwards;
+    }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+    .correction-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--red); flex-shrink: 0;
+    }
+
+    #no-pose-msg {
+      position: absolute;
+      bottom: 80px; left: 50%; transform: translateX(-50%);
+      padding: 10px 24px; border-radius: 12px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      font-size: 15px; font-weight: 400;
+      color: var(--text-secondary); z-index: 10;
+      opacity: 0; transition: opacity 0.3s ease;
+      text-align: center;
+    }
+    #no-pose-msg.visible { opacity: 1; }
+
+    /* ── Get-Ready Overlay ── */
+    #track-overlay {
+      position: absolute; inset: 0; z-index: 20;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; padding: 24px; text-align: center;
+      pointer-events: none;   /* keep the top-bar controls tappable */
+      background: rgba(10, 10, 26, 0.5);
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+      transition: opacity 0.4s ease;
+    }
+    #track-overlay.hidden { display: none; }
+    #track-overlay.fading { opacity: 0; }
+    #overlay-title {
+      font-size: 20px; font-weight: 700;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    }
+    #overlay-sub {
+      font-size: 14px; color: var(--text-secondary);
+      max-width: 280px; line-height: 1.5;
+    }
+    #countdown-num {
+      font-size: 92px; font-weight: 800; line-height: 1;
+      color: var(--cyan);
+      text-shadow: 0 0 30px rgba(0, 229, 255, 0.5);
+    }
+    #countdown-num.pulse { animation: pop 0.5s ease; }
+    @keyframes pop {
+      0% { transform: scale(0.6); opacity: 0.4; }
+      50% { transform: scale(1.12); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── Recap Sheet ── */
+    #steps-sheet {
+      position: absolute; inset: 0; z-index: 30;
+      background: rgba(10, 10, 26, 0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      overflow-y: auto;
+      padding: 0 24px;
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #steps-sheet.visible { transform: translateY(0); }
+    #steps-sheet h3 {
+      font-size: 18px; font-weight: 700;
+      padding: 8px 0 4px;
+    }
+    #sheet-canvas { display: block; width: 100%; height: 200px; margin: 6px 0; }
+    .btn-resume {
+      display: block; width: 100%;
+      padding: 16px; margin: 20px 0 0;
+      border: none; border-radius: 14px;
+      background: linear-gradient(135deg, var(--cyan), #0091ea);
+      color: #fff; font-family: var(--font);
+      font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+    .btn-resume:active { transform: scale(0.97); opacity: 0.9; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ LOADING SCREEN ═══════════ -->
+<div class="screen active" id="screen-loading">
+  <div class="loader-ring"></div>
+  <div class="loader-text">
+    <span class="status" id="load-status">Loading MediaPipe model...</span><br>
+    This may take a moment on first load
+  </div>
+</div>
+
+<!-- ═══════════ POSE SELECTION SCREEN ═══════════ -->
+<div class="screen" id="screen-select">
+  <div class="select-header">
+    <h1>Yoga Pose Tracker</h1>
+    <p>Choose a pose to practice</p>
+  </div>
+  <div class="pose-grid" id="pose-grid"></div>
+</div>
+
+<!-- ═══════════ POSE GUIDE SCREEN ═══════════ -->
+<div class="screen" id="screen-guide">
+  <button class="guide-back" id="btn-back-select">← Back to poses</button>
+  <div class="guide-hero">
+    <span class="emoji" id="guide-emoji"></span>
+    <h2 id="guide-name"></h2>
+    <div class="sanskrit" id="guide-sanskrit"></div>
+  </div>
+  <div class="demo-stage">
+    <canvas id="guide-canvas"></canvas>
+    <div class="demo-caption" id="demo-caption"></div>
+    <div class="demo-controls">
+      <button class="demo-btn" id="demo-prev" aria-label="Previous step">‹</button>
+      <div class="demo-dots" id="demo-dots"></div>
+      <button class="demo-btn" id="demo-next" aria-label="Next step">›</button>
+    </div>
+  </div>
+
+  <div class="guide-section">
+    <h4>How to do it</h4>
+    <div class="guide-steps" id="guide-steps"></div>
+  </div>
+  <div class="guide-section">
+    <h4>Key form tips</h4>
+    <div class="guide-tips" id="guide-tips"></div>
+  </div>
+  <button class="btn-begin" id="btn-begin">Begin Tracking →</button>
+</div>
+
+<!-- ═══════════ TRACKING SCREEN ═══════════ -->
+<div class="screen" id="screen-track">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div class="perfect-glow" id="perfect-glow"></div>
+
+  <div id="top-bar">
+    <div id="score-container">
+      <svg id="score-ring" width="72" height="72" viewBox="0 0 72 72">
+        <circle id="score-bg" cx="36" cy="36" r="30" />
+        <circle id="score-arc" cx="36" cy="36" r="30" />
+      </svg>
+      <div id="score-text">—</div>
+    </div>
+    <div class="top-btn-group">
+      <button class="icon-btn" id="btn-back-guide" title="Change Pose">🔙</button>
+      <button class="icon-btn" id="btn-how-to" title="How to do this pose">❔</button>
+      <button class="icon-btn" id="btn-ghost" title="Toggle target outline">👤</button>
+      <button class="icon-btn" id="btn-flip" title="Flip Camera">🔄</button>
+    </div>
+  </div>
+
+  <div id="status-card">
+    <div id="pose-badge"></div>
+    <div id="score-value">—</div>
+    <div id="score-label"></div>
+    <div id="score-detail"></div>
+  </div>
+
+  <div id="no-pose-msg">Get into position! 🧘</div>
+
+  <div id="corrections-panel">
+    <h3>⚡ Form Corrections</h3>
+    <div id="corrections-list"></div>
+  </div>
+
+  <div id="track-overlay">
+    <div id="countdown-num" style="display:none"></div>
+    <div id="overlay-title">Get into frame</div>
+    <div id="overlay-sub">Step back until your whole body — head to ankles — is visible.</div>
+  </div>
+
+  <div id="steps-sheet">
+    <h3 id="sheet-title"></h3>
+    <canvas id="sheet-canvas"></canvas>
+    <div class="guide-section">
+      <h4>How to do it</h4>
+      <div class="guide-steps" id="sheet-steps"></div>
+    </div>
+    <button class="btn-resume" id="btn-resume">Back to tracking →</button>
+  </div>
+</div>
+
+<script type="module">
+import {
+  PoseLandmarker,
+  FilesetResolver,
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
+
+// ─────────────────────────────────────────────────────────────
+// Landmark Indices
+// ─────────────────────────────────────────────────────────────
+const LM = {
+  nose: 0,
+  left_shoulder: 11, right_shoulder: 12,
+  left_elbow: 13, right_elbow: 14,
+  left_wrist: 15, right_wrist: 16,
+  left_hip: 23, right_hip: 24,
+  left_knee: 25, right_knee: 26,
+  left_ankle: 27, right_ankle: 28,
+};
+
+const SKELETON = [
+  ["left_shoulder","right_shoulder"],
+  ["left_shoulder","left_elbow"],["left_elbow","left_wrist"],
+  ["right_shoulder","right_elbow"],["right_elbow","right_wrist"],
+  ["left_shoulder","left_hip"],["right_shoulder","right_hip"],
+  ["left_hip","right_hip"],
+  ["left_hip","left_knee"],["left_knee","left_ankle"],
+  ["right_hip","right_knee"],["right_knee","right_ankle"],
+];
+
+// ─────────────────────────────────────────────────────────────
+// Angle Calculation
+// ─────────────────────────────────────────────────────────────
+function calcAngle(a, b, c) {
+  const ba = [a.x - b.x, a.y - b.y];
+  const bc = [c.x - b.x, c.y - b.y];
+  const dot = ba[0]*bc[0] + ba[1]*bc[1];
+  const magBA = Math.sqrt(ba[0]**2 + ba[1]**2);
+  const magBC = Math.sqrt(bc[0]**2 + bc[1]**2);
+  let cosAngle = dot / (magBA * magBC + 1e-6);
+  cosAngle = Math.max(-1, Math.min(1, cosAngle));
+  return Math.acos(cosAngle) * (180 / Math.PI);
+}
+
+function pt(landmarks, name) {
+  const lm = landmarks[LM[name]];
+  return { x: lm.x, y: lm.y };
+}
+
+function computeAngles(landmarks) {
+  const p = (n) => pt(landmarks, n);
+  return {
+    left_elbow:    calcAngle(p("left_shoulder"), p("left_elbow"), p("left_wrist")),
+    right_elbow:   calcAngle(p("right_shoulder"), p("right_elbow"), p("right_wrist")),
+    left_shoulder: calcAngle(p("left_elbow"), p("left_shoulder"), p("left_hip")),
+    right_shoulder:calcAngle(p("right_elbow"), p("right_shoulder"), p("right_hip")),
+    left_hip:      calcAngle(p("left_shoulder"), p("left_hip"), p("left_knee")),
+    right_hip:     calcAngle(p("right_shoulder"), p("right_hip"), p("right_knee")),
+    left_knee:     calcAngle(p("left_hip"), p("left_knee"), p("left_ankle")),
+    right_knee:    calcAngle(p("right_hip"), p("right_knee"), p("right_ankle")),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Yoga Pose Data (templates + guide content)
+// ─────────────────────────────────────────────────────────────
+// `rig` drives the animated demo figure: each entry is the on-screen direction
+// (degrees, 0° = right, 90° = up) of a body segment. The directions are chosen so
+// the drawn figure scores 100% against the pose's own `angles` template — the demo,
+// the target outline and the live scoring all describe the same shape.
+const YOGA_POSES = {
+  mountain: {
+    name: "Mountain Pose",
+    sanskrit: "Tadasana",
+    emoji: "🏔️",
+    description: "The foundation of all standing poses — builds awareness of posture and balance.",
+    steps: [
+      { text: "Stand with your feet together, big toes touching", focus: ["left_leg","right_leg"] },
+      { text: "Distribute your weight evenly across both feet", focus: ["left_leg","right_leg"] },
+      { text: "Let your arms hang naturally at your sides, palms facing forward", focus: ["left_arm","right_arm"] },
+      { text: "Lengthen your spine upward through the crown of your head", focus: ["torso","head"] },
+      { text: "Relax your shoulders down and back, away from your ears", focus: ["torso"] },
+    ],
+    tips: [
+      { icon: "✅", text: "Keep your knees straight but not locked" },
+      { icon: "✅", text: "Engage your core gently" },
+      { icon: "⚠️", text: "Don't lean forward or backward" },
+    ],
+    rig: {
+      torso: 90,
+      arm_left: [-75, -65], arm_right: [-105, -115],
+      leg_left: [-80, -90], leg_right: [-100, -90],
+    },
+    angles: {
+      left_elbow:[170,20], right_elbow:[170,20],
+      left_shoulder:[15,20], right_shoulder:[15,20],
+      left_hip:[170,20], right_hip:[170,20],
+      left_knee:[170,20], right_knee:[170,20],
+    },
+  },
+  warrior1: {
+    name: "Warrior I",
+    sanskrit: "Virabhadrasana I",
+    emoji: "⚔️",
+    description: "A powerful standing pose that strengthens legs and opens the chest.",
+    steps: [
+      { text: "From Mountain Pose, step your right foot back about 3–4 feet", focus: ["right_leg"] },
+      { text: "Bend your left (front) knee to about 90°, stacked over the ankle", focus: ["left_leg"] },
+      { text: "Keep your back leg straight and strong, heel pressing down", focus: ["right_leg"] },
+      { text: "Raise both arms overhead, reaching toward the ceiling", focus: ["left_arm","right_arm"] },
+      { text: "Square your hips toward the front of your mat", focus: ["torso"] },
+    ],
+    tips: [
+      { icon: "✅", text: "Front knee should be directly over the ankle" },
+      { icon: "✅", text: "Keep both arms straight and parallel" },
+      { icon: "⚠️", text: "Don't let your front knee extend past your toes" },
+    ],
+    rig: {
+      torso: 90,
+      arm_left: [80, 95], arm_right: [100, 85],
+      leg_left: [-20, -105], leg_right: [-110, -125],
+    },
+    angles: {
+      left_knee:[95,20], right_knee:[165,20],
+      left_hip:[110,25], right_hip:[160,25],
+      left_shoulder:[170,25], right_shoulder:[170,25],
+      left_elbow:[165,20], right_elbow:[165,20],
+    },
+  },
+  warrior2: {
+    name: "Warrior II",
+    sanskrit: "Virabhadrasana II",
+    emoji: "🗡️",
+    description: "Builds stamina and focus while stretching the hips and shoulders.",
+    steps: [
+      { text: "Stand with your feet wide apart, about 4 feet", focus: ["left_leg","right_leg"] },
+      { text: "Turn your left foot out 90° and your right foot slightly inward", focus: ["left_leg","right_leg"] },
+      { text: "Bend your left knee to 90°, directly over the ankle", focus: ["left_leg"] },
+      { text: "Extend both arms out horizontally at shoulder height", focus: ["left_arm","right_arm"] },
+      { text: "Turn your head to gaze over your left fingertips", focus: ["head","left_arm"] },
+    ],
+    tips: [
+      { icon: "✅", text: "Arms should form a straight line, parallel to the floor" },
+      { icon: "✅", text: "Keep your torso upright, not leaning forward" },
+      { icon: "⚠️", text: "Back leg must stay completely straight" },
+    ],
+    rig: {
+      torso: 90,
+      arm_left: [0, -10], arm_right: [180, 190],
+      leg_left: [-10, -95], leg_right: [-130, -115],
+    },
+    angles: {
+      left_knee:[95,20], right_knee:[165,20],
+      left_hip:[100,25], right_hip:[140,25],
+      left_shoulder:[90,25], right_shoulder:[90,25],
+      left_elbow:[170,20], right_elbow:[170,20],
+    },
+  },
+  tree: {
+    name: "Tree Pose",
+    sanskrit: "Vrksasana",
+    emoji: "🌳",
+    description: "A balancing pose that improves focus and strengthens the standing leg.",
+    steps: [
+      { text: "Stand tall on your left leg, grounding through the foot", focus: ["left_leg"] },
+      { text: "Place your right foot on your inner left thigh (or calf — never the knee)", focus: ["right_leg"] },
+      { text: "Press your foot and thigh into each other, opening the right knee out", focus: ["right_leg"] },
+      { text: "Raise both arms straight overhead, palms facing each other", focus: ["left_arm","right_arm"] },
+      { text: "Fix your gaze on a steady point ahead for balance", focus: ["head"] },
+    ],
+    tips: [
+      { icon: "✅", text: "Standing leg should be completely straight" },
+      { icon: "✅", text: "Open the bent knee out to the side" },
+      { icon: "⚠️", text: "Never rest your foot on the knee joint" },
+    ],
+    rig: {
+      torso: 90,
+      arm_left: [80, 90], arm_right: [100, 90],
+      leg_left: [-80, -90], leg_right: [170, -70],
+    },
+    angles: {
+      left_knee:[170,20], right_knee:[60,30],
+      left_hip:[170,20], right_hip:[80,30],
+      left_shoulder:[170,25], right_shoulder:[170,25],
+      left_elbow:[170,20], right_elbow:[170,20],
+    },
+  },
+  triangle: {
+    name: "Triangle Pose",
+    sanskrit: "Trikonasana",
+    emoji: "🔺",
+    description: "A deep stretch for the hamstrings, hips, and spine.",
+    steps: [
+      { text: "Stand with your feet wide apart, about 4 feet", focus: ["left_leg","right_leg"] },
+      { text: "Turn your left foot out 90° and your right foot slightly inward", focus: ["left_leg","right_leg"] },
+      { text: "Extend both arms out to the sides at shoulder height", focus: ["left_arm","right_arm"] },
+      { text: "Hinge sideways at the hips and reach your left hand down to your shin", focus: ["torso","left_arm"] },
+      { text: "Extend your right arm straight up, stacked over the left", focus: ["right_arm"] },
+    ],
+    tips: [
+      { icon: "✅", text: "Both legs stay completely straight" },
+      { icon: "✅", text: "Keep your torso in one plane — don't lean forward" },
+      { icon: "⚠️", text: "Don't collapse your chest — keep it open" },
+    ],
+    rig: {
+      torso: 35,
+      arm_left: [-55, -45], arm_right: [125, 135],
+      leg_left: [-60, -50], leg_right: [-120, -140],
+    },
+    angles: {
+      left_knee:[170,20], right_knee:[170,20],
+      left_hip:[100,25], right_hip:[140,25],
+      left_shoulder:[90,25], right_shoulder:[90,25],
+      left_elbow:[170,20], right_elbow:[170,20],
+    },
+  },
+};
+
+// [ too small an angle, too large an angle ] — a joint angle grows as the joint
+// straightens, so the first string always fixes an over-bent joint.
+const CORRECTION_TIPS = {
+  left_knee:     ["Straighten your left knee", "Bend your left knee more"],
+  right_knee:    ["Straighten your right knee", "Bend your right knee more"],
+  left_hip:      ["Open your left hip more", "Close your left hip"],
+  right_hip:     ["Open your right hip more", "Close your right hip"],
+  left_shoulder: ["Raise your left arm", "Lower your left arm"],
+  right_shoulder:["Raise your right arm", "Lower your right arm"],
+  left_elbow:    ["Straighten your left arm", "Bend your left elbow"],
+  right_elbow:   ["Straighten your right arm", "Bend your right elbow"],
+};
+
+// ─────────────────────────────────────────────────────────────
+// Reference Figure — builds the demo skeleton from a pose rig
+// ─────────────────────────────────────────────────────────────
+const SEG_DEFAULT = {
+  torso: 0.26, upper: 0.135, fore: 0.135, thigh: 0.20, shin: 0.20,
+  shoulderHalf: 0.06, hipHalf: 0.05, neck: 0.12, head: 0.062,
+};
+
+function dirVec(deg) {
+  const r = deg * Math.PI / 180;
+  return { x: Math.cos(r), y: -Math.sin(r) };   // canvas y grows downward
+}
+
+function buildReference(rig, len) {
+  const SEG = len || SEG_DEFAULT;
+  const hipC = { x: 0.5, y: 0.62 };
+  const up = dirVec(rig.torso);
+  const shC = { x: hipC.x + SEG.torso * up.x, y: hipC.y + SEG.torso * up.y };
+  const perp = dirVec(rig.torso - 90);   // +perp points to the body's anatomical left
+  const P = { nose: { x: shC.x + SEG.neck * up.x, y: shC.y + SEG.neck * up.y } };
+
+  for (const [side, sgn] of [["left", 1], ["right", -1]]) {
+    const sh = { x: shC.x + sgn * SEG.shoulderHalf * perp.x, y: shC.y + sgn * SEG.shoulderHalf * perp.y };
+    const hp = { x: hipC.x + sgn * SEG.hipHalf * perp.x,      y: hipC.y + sgn * SEG.hipHalf * perp.y };
+    P[`${side}_shoulder`] = sh;
+    P[`${side}_hip`] = hp;
+
+    const [thUpper, thFore] = rig[`arm_${side}`];
+    const du = dirVec(thUpper), df = dirVec(thFore);
+    const el = { x: sh.x + SEG.upper * du.x, y: sh.y + SEG.upper * du.y };
+    P[`${side}_elbow`] = el;
+    P[`${side}_wrist`] = { x: el.x + SEG.fore * df.x, y: el.y + SEG.fore * df.y };
+
+    const [thThigh, thShin] = rig[`leg_${side}`];
+    const dt = dirVec(thThigh), ds = dirVec(thShin);
+    const kn = { x: hp.x + SEG.thigh * dt.x, y: hp.y + SEG.thigh * dt.y };
+    P[`${side}_knee`] = kn;
+    P[`${side}_ankle`] = { x: kn.x + SEG.shin * ds.x, y: kn.y + SEG.shin * ds.y };
+  }
+  FIGURE_HEAD.set(P, SEG.head);
+  return P;
+}
+
+// Head radius travels with the figure it belongs to, so a figure built in pixel
+// units (the personalised target outline) keeps a matching head.
+const FIGURE_HEAD = new WeakMap();
+const headRadius = (P) => FIGURE_HEAD.get(P) ?? SEG_DEFAULT.head;
+
+const REFERENCE = {};
+for (const [key, pose] of Object.entries(YOGA_POSES)) REFERENCE[key] = buildReference(pose.rig);
+
+const BODY_PARTS = {
+  torso:     [["left_shoulder","right_shoulder"],["left_shoulder","left_hip"],
+              ["right_shoulder","right_hip"],["left_hip","right_hip"]],
+  left_arm:  [["left_shoulder","left_elbow"],["left_elbow","left_wrist"]],
+  right_arm: [["right_shoulder","right_elbow"],["right_elbow","right_wrist"]],
+  left_leg:  [["left_hip","left_knee"],["left_knee","left_ankle"]],
+  right_leg: [["right_hip","right_knee"],["right_knee","right_ankle"]],
+  head:      [],
+};
+
+const segKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+function focusSet(focus) {
+  const set = new Set();
+  for (const part of focus || []) {
+    for (const [a, b] of BODY_PARTS[part] || []) set.add(segKey(a, b));
+  }
+  if ((focus || []).includes("head")) set.add("head");
+  return set;
+}
+
+function figureBounds(P, headPad) {
+  const xs = Object.values(P).map(p => p.x), ys = Object.values(P).map(p => p.y);
+  const pad = headPad ? headRadius(P) : 0;
+  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
+  const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/** Isotropic fit of a figure into a w×h box → { map, scale }. */
+function fitFigure(P, w, h, pad) {
+  const b = figureBounds(P, true);
+  const scale = Math.min((w - 2 * pad) / (b.w || 1e-6), (h - 2 * pad) / (b.h || 1e-6));
+  const ox = (w - b.w * scale) / 2 - b.x * scale;
+  const oy = (h - b.h * scale) / 2 - b.y * scale;
+  return { map: p => ({ x: p.x * scale + ox, y: p.y * scale + oy }), scale };
+}
+
+const CYAN = "#00e5ff";
+
+function drawFigure(ctx, P, tf, opts = {}) {
+  const { map, scale } = tf;
+  const focus = opts.focus;
+  const dimmed = focus && focus.size > 0;
+  const lw = opts.lw || 6;
+  const base = opts.color || "rgba(240,240,245,0.85)";
+  const dim = opts.dimColor || "rgba(240,240,245,0.22)";
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = opts.alpha ?? 1;
+  ctx.setLineDash(opts.dash || []);
+
+  // segColor lets the caller paint each segment by how correct that body part is
+  const colorOf = (s, e, on) => (opts.segColor && opts.segColor(s, e)) ||
+                                (on ? CYAN : (dimmed ? dim : base));
+
+  // neck
+  const shMid = { x: (P.left_shoulder.x + P.right_shoulder.x) / 2,
+                  y: (P.left_shoulder.y + P.right_shoulder.y) / 2 };
+  const headOn = focus && focus.has("head");
+  const a = map(shMid), b = map(P.nose);
+  ctx.strokeStyle = colorOf("neck", "nose", headOn);
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+
+  // limbs + torso
+  for (const [s, e] of SKELETON) {
+    const on = focus && focus.has(segKey(s, e));
+    ctx.strokeStyle = colorOf(s, e, on);
+    ctx.lineWidth = on ? lw * 1.45 : lw;
+    const p1 = map(P[s]), p2 = map(P[e]);
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+  }
+
+  ctx.setLineDash([]);
+
+  // head
+  const hc = map(P.nose);
+  ctx.strokeStyle = colorOf("neck", "nose", headOn);
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.arc(hc.x, hc.y, headRadius(P) * scale, 0, 2 * Math.PI); ctx.stroke();
+
+  // joints
+  if (opts.joints !== false) {
+    for (const name of Object.keys(LM)) {
+      if (name === "nose" || !P[name]) continue;
+      const p = map(P[name]);
+      ctx.fillStyle = base;
+      ctx.globalAlpha = (opts.alpha ?? 1) * (dimmed ? 0.5 : 1);
+      ctx.beginPath(); ctx.arc(p.x, p.y, lw * 0.62, 0, 2 * Math.PI); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Pose Matching (single pose)
+// ─────────────────────────────────────────────────────────────
+function matchSinglePose(angles, template) {
+  const results = {};
+  let correct = 0, total = 0;
+
+  for (const [joint, [target, tolerance]] of Object.entries(template)) {
+    if (!(joint in angles)) continue;
+    total++;
+    const actual = angles[joint];
+    const diff = Math.abs(actual - target);
+    const ok = diff <= tolerance;
+    const direction = actual - target;
+    results[joint] = { actual, target, tolerance, diff, ok, direction };
+    if (ok) correct++;
+  }
+
+  const score = total > 0 ? (correct / total) * 100 : 0;
+  return { score, results };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Drawing
+// ─────────────────────────────────────────────────────────────
+const GREEN = "#00e676";
+const RED = "#ff5252";
+const YELLOW = "#ffd740";
+
+function drawSkeleton(ctx, landmarks, w, h, jointResults, targetPx) {
+  const badJoints = new Set();
+  for (const [joint, res] of Object.entries(jointResults)) {
+    if (!res.ok) badJoints.add(joint);
+  }
+
+  ctx.lineWidth = 4; ctx.lineCap = "round";
+  for (const [startName, endName] of SKELETON) {
+    if (!(startName in LM) || !(endName in LM)) continue;
+    const s = landmarks[LM[startName]];
+    const e = landmarks[LM[endName]];
+    const isBad = badJoints.has(startName) || badJoints.has(endName);
+    ctx.strokeStyle = isBad ? RED : GREEN;
+    ctx.beginPath();
+    ctx.moveTo(s.x * w, s.y * h);
+    ctx.lineTo(e.x * w, e.y * h);
+    ctx.stroke();
+  }
+
+  for (const [name, idx] of Object.entries(LM)) {
+    const lm = landmarks[idx];
+    const isBad = badJoints.has(name);
+    ctx.fillStyle = isBad ? RED : GREEN;
+    ctx.beginPath();
+    ctx.arc(lm.x * w, lm.y * h, 6, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // Nudge arrows: each points from the joint toward where it belongs.
+  for (const [joint, res] of Object.entries(jointResults)) {
+    if (res.ok || !(joint in LM)) continue;
+    const lm = landmarks[LM[joint]];
+    const px = lm.x * w, py = lm.y * h;
+
+    let dx, dy;
+    if (targetPx && targetPx[joint]) {
+      dx = targetPx[joint].x - px;
+      dy = targetPx[joint].y - py;
+    } else {
+      dx = 0;
+      dy = res.direction > 0 ? -35 : 35;   // no target figure: fall back to up/down
+    }
+    const dist = Math.hypot(dx, dy);
+    if (dist < 12) continue;               // already on the mark
+
+    const ux = dx / dist, uy = dy / dist;
+    const len = Math.min(dist, 70);
+    const ex = px + ux * len, ey = py + uy * len;
+
+    ctx.strokeStyle = YELLOW; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ex, ey); ctx.stroke();
+
+    const hs = 11, nx = -uy, ny = ux;
+    ctx.fillStyle = YELLOW;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - ux * hs + nx * hs * 0.5, ey - uy * hs + ny * hs * 0.5);
+    ctx.lineTo(ex - ux * hs - nx * hs * 0.5, ey - uy * hs - ny * hs * 0.5);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Screen Management
+// ─────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+// ─────────────────────────────────────────────────────────────
+// UI Elements
+// ─────────────────────────────────────────────────────────────
+const scoreContainer = document.getElementById("score-container");
+const scoreArc = document.getElementById("score-arc");
+const scoreText = document.getElementById("score-text");
+const poseBadge = document.getElementById("pose-badge");
+const correctionsPanel = document.getElementById("corrections-panel");
+const correctionsList = document.getElementById("corrections-list");
+const noPoseMsg = document.getElementById("no-pose-msg");
+const statusCard = document.getElementById("status-card");
+const scoreValue = document.getElementById("score-value");
+const scoreLabel = document.getElementById("score-label");
+const scoreDetail = document.getElementById("score-detail");
+const perfectGlow = document.getElementById("perfect-glow");
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const circumference = 2 * Math.PI * 30;
+scoreArc.style.strokeDasharray = circumference;
+scoreArc.style.strokeDashoffset = circumference;
+
+function getScoreColor(score) {
+  if (score >= 80) return GREEN;
+  if (score >= 60) return YELLOW;
+  return RED;
+}
+
+function scoreLabelFor(score) {
+  if (score >= 100) return "Perfect form";
+  if (score >= 80) return "Great — hold it";
+  if (score >= 60) return "Almost there";
+  if (score >= 30) return "Keep adjusting";
+  return "Find the pose";
+}
+
+function updateTrackingUI(poseName, score, jointResults, detected) {
+  if (!detected) {
+    scoreContainer.classList.remove("visible");
+    statusCard.classList.remove("visible");
+    correctionsPanel.classList.remove("visible");
+    noPoseMsg.classList.add("visible");
+    perfectGlow.classList.remove("visible");
+    return;
+  }
+
+  noPoseMsg.classList.remove("visible");
+
+  scoreContainer.classList.add("visible");
+  const offset = circumference - (score / 100) * circumference;
+  scoreArc.style.strokeDashoffset = offset;
+  const color = getScoreColor(score);
+  scoreArc.style.stroke = color;
+  scoreText.style.color = color;
+  scoreText.textContent = `${Math.round(score)}%`;
+
+  const aligned = Object.values(jointResults).filter(r => r.ok).length;
+  const total = Object.keys(jointResults).length;
+  statusCard.classList.add("visible");
+  poseBadge.textContent = score >= 80 ? `✅ ${poseName}` : `🧘 ${poseName}`;
+  scoreValue.textContent = `${Math.round(score)}%`;
+  scoreValue.style.color = color;
+  scoreLabel.textContent = scoreLabelFor(score);
+  scoreLabel.style.color = color;
+  scoreDetail.textContent = `${aligned} of ${total} joints aligned`;
+
+  perfectGlow.classList.toggle("visible", score >= 95);
+
+  const corrections = [];
+  for (const [joint, res] of Object.entries(jointResults)) {
+    if (!res.ok) {
+      const tips = CORRECTION_TIPS[joint];
+      if (tips) corrections.push(res.direction < 0 ? tips[0] : tips[1]);
+    }
+  }
+
+  if (corrections.length > 0) {
+    correctionsPanel.classList.add("visible");
+    correctionsList.innerHTML = corrections.slice(0, 5).map(tip =>
+      `<div class="correction-item"><span class="correction-dot"></span>${tip}</div>`
+    ).join("");
+  } else {
+    correctionsPanel.classList.remove("visible");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Camera
+// ─────────────────────────────────────────────────────────────
+let facingMode = "user";
+let cameraStream = null;
+
+async function startCamera() {
+  try {
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    cameraStream = stream;
+    video.srcObject = stream;
+    await video.play();
+  } catch (err) {
+    alert("Camera access denied. Please allow camera permissions and reload.");
+    console.error(err);
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+}
+
+document.getElementById("btn-flip").addEventListener("click", async () => {
+  facingMode = facingMode === "user" ? "environment" : "user";
+  const isFront = facingMode === "user";
+  video.style.transform = isFront ? "scaleX(-1)" : "scaleX(1)";
+  canvas.style.transform = isFront ? "scaleX(-1)" : "scaleX(1)";
+  await startCamera();
+});
+
+// ─────────────────────────────────────────────────────────────
+// Build Pose Selection Grid
+// ─────────────────────────────────────────────────────────────
+const poseGrid = document.getElementById("pose-grid");
+let selectedPoseKey = null;
+let isTracking = false;
+let animFrameId = null;
+
+for (const [key, pose] of Object.entries(YOGA_POSES)) {
+  const card = document.createElement("div");
+  card.className = "pose-card";
+  card.innerHTML = `
+    <div class="pose-card-emoji">${pose.emoji}</div>
+    <div class="pose-card-info">
+      <h3>${pose.name}</h3>
+      <div class="sanskrit">${pose.sanskrit}</div>
+      <p>${pose.description}</p>
+    </div>
+    <div class="pose-card-arrow">›</div>
+  `;
+  card.addEventListener("click", () => showGuide(key));
+  poseGrid.appendChild(card);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Guide Screen
+// ─────────────────────────────────────────────────────────────
+const guideCanvas = document.getElementById("guide-canvas");
+const demoCaption = document.getElementById("demo-caption");
+const demoDots = document.getElementById("demo-dots");
+const STEP_MS = 3800;
+
+let demoStep = 0;
+let demoRAF = null;
+let demoStepStart = 0;
+
+/** Sets up a canvas for the current DPR and returns its CSS-pixel size. */
+function fitCanvas(canvas) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return null;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const c = canvas.getContext("2d");
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  return { ctx: c, w, h };
+}
+
+/**
+ * Draws a reference figure mirrored, so the demo reads like a mirror — the
+ * body's left limb appears on the viewer's left, matching the flipped
+ * self-view on the tracking screen.
+ */
+function drawDemo(canvas, key, focus, bob = 0) {
+  const surface = fitCanvas(canvas);
+  if (!surface) return;
+  const { ctx: c, w, h } = surface;
+  const ref = REFERENCE[key];
+  const tf = fitFigure(ref, w, h, Math.min(w, h) * 0.1);
+
+  c.save();
+  c.translate(w, bob);
+  c.scale(-1, 1);
+
+  // ground line under the lowest foot
+  const feet = Math.max(tf.map(ref.left_ankle).y, tf.map(ref.right_ankle).y);
+  const grad = c.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, "rgba(0,229,255,0)");
+  grad.addColorStop(0.5, "rgba(0,229,255,0.25)");
+  grad.addColorStop(1, "rgba(0,229,255,0)");
+  c.strokeStyle = grad; c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(w * 0.08, feet + 8); c.lineTo(w * 0.92, feet + 8); c.stroke();
+
+  drawFigure(c, ref, tf, { focus, lw: Math.max(5, tf.scale * 0.022) });
+  c.restore();
+}
+
+function setDemoStep(i, restartTimer = true) {
+  const pose = YOGA_POSES[selectedPoseKey];
+  demoStep = (i + pose.steps.length) % pose.steps.length;
+  if (restartTimer) demoStepStart = performance.now();
+
+  const step = pose.steps[demoStep];
+  demoCaption.innerHTML = `<span><b>Step ${demoStep + 1}</b> · ${step.text}</span>`;
+
+  demoDots.querySelectorAll(".demo-dot").forEach((d, idx) =>
+    d.classList.toggle("active", idx === demoStep));
+  document.querySelectorAll("#guide-steps .guide-step").forEach((el, idx) =>
+    el.classList.toggle("active", idx === demoStep));
+}
+
+function startDemoLoop() {
+  stopDemoLoop();
+  demoStepStart = performance.now();
+  const tick = (ts) => {
+    demoRAF = requestAnimationFrame(tick);
+    if (ts - demoStepStart > STEP_MS) setDemoStep(demoStep + 1);
+    const pose = YOGA_POSES[selectedPoseKey];
+    const bob = Math.sin(ts / 1100) * 3;
+    drawDemo(guideCanvas, selectedPoseKey, focusSet(pose.steps[demoStep].focus), bob);
+  };
+  demoRAF = requestAnimationFrame(tick);
+}
+
+function stopDemoLoop() {
+  if (demoRAF) cancelAnimationFrame(demoRAF);
+  demoRAF = null;
+}
+
+function showGuide(key) {
+  selectedPoseKey = key;
+  const pose = YOGA_POSES[key];
+
+  document.getElementById("guide-emoji").textContent = pose.emoji;
+  document.getElementById("guide-name").textContent = pose.name;
+  document.getElementById("guide-sanskrit").textContent = pose.sanskrit;
+
+  const stepsEl = document.getElementById("guide-steps");
+  stepsEl.innerHTML = renderSteps(pose);
+  stepsEl.querySelectorAll(".guide-step").forEach((el, idx) =>
+    el.addEventListener("click", () => setDemoStep(idx)));
+
+  const tipsEl = document.getElementById("guide-tips");
+  tipsEl.innerHTML = pose.tips.map(tip =>
+    `<div class="guide-tip">
+      <span class="tip-icon">${tip.icon}</span>
+      <span>${tip.text}</span>
+    </div>`
+  ).join("");
+
+  demoDots.innerHTML = pose.steps.map(() => `<div class="demo-dot"></div>`).join("");
+
+  showScreen("screen-guide");
+  document.getElementById("screen-guide").scrollTop = 0;
+  setDemoStep(0);
+  startDemoLoop();
+}
+
+function renderSteps(pose) {
+  return pose.steps.map((step, i) =>
+    `<div class="guide-step">
+      <div class="step-number">${i + 1}</div>
+      <div class="step-text">${step.text}</div>
+    </div>`
+  ).join("");
+}
+
+document.getElementById("demo-prev").addEventListener("click", () => setDemoStep(demoStep - 1));
+document.getElementById("demo-next").addEventListener("click", () => setDemoStep(demoStep + 1));
+
+document.getElementById("btn-back-select").addEventListener("click", () => {
+  stopDemoLoop();
+  showScreen("screen-select");
+});
+
+// ─────────────────────────────────────────────────────────────
+// Begin Tracking
+// ─────────────────────────────────────────────────────────────
+let poseLandmarker = null;
+
+// framing → countdown → live
+let trackPhase = "framing";
+let countdownStart = 0;
+let readySince = 0;
+let ghostOn = true;
+
+const trackOverlay = document.getElementById("track-overlay");
+const overlayTitle = document.getElementById("overlay-title");
+const overlaySub = document.getElementById("overlay-sub");
+const countdownNum = document.getElementById("countdown-num");
+const stepsSheet = document.getElementById("steps-sheet");
+const btnGhost = document.getElementById("btn-ghost");
+
+const FRAME_CHECK = ["nose", "left_shoulder", "right_shoulder", "left_hip", "right_hip",
+                     "left_knee", "right_knee", "left_ankle", "right_ankle"];
+
+/** True when the whole body — head through ankles — is inside the frame. */
+function isFullBodyVisible(landmarks) {
+  return FRAME_CHECK.every(name => {
+    const lm = landmarks[LM[name]];
+    if (!lm) return false;
+    if ((lm.visibility ?? 1) < 0.5) return false;
+    return lm.x > 0.02 && lm.x < 0.98 && lm.y > 0.02 && lm.y < 0.99;
+  });
+}
+
+let overlayState = "";
+function setOverlay(state, title, sub, count) {
+  if (state !== overlayState) {
+    overlayState = state;
+    trackOverlay.classList.remove("hidden", "fading");
+    countdownNum.style.display = count ? "block" : "none";
+    overlayTitle.textContent = title;
+    overlaySub.textContent = sub;
+  }
+  if (count && countdownNum.textContent !== String(count)) {
+    countdownNum.textContent = count;
+    countdownNum.classList.remove("pulse");
+    void countdownNum.offsetWidth;   // restart the animation
+    countdownNum.classList.add("pulse");
+  }
+}
+
+function hideOverlay() {
+  overlayState = "live";
+  trackOverlay.classList.add("fading");
+  setTimeout(() => {
+    if (overlayState === "live") trackOverlay.classList.add("hidden");
+  }, 400);
+}
+
+function resetTrackPhase() {
+  trackPhase = "framing";
+  readySince = 0;
+  resetBodyLengths();
+  overlayState = "";
+  trackOverlay.classList.remove("hidden", "fading");
+  updateTrackingUI("", 0, {}, false);
+  noPoseMsg.classList.remove("visible");
+}
+
+/**
+ * The user's own limb lengths in pixels, smoothed across frames. 2D projection
+ * foreshortens whatever points at the camera, so each length rises quickly
+ * toward a longer measurement and decays slowly — settling near the true length.
+ */
+let bodyLengths = null;
+
+function resetBodyLengths() { bodyLengths = null; }
+
+function measureBody(landmarks, w, h) {
+  const P = (n) => ({ x: landmarks[LM[n]].x * w, y: landmarks[LM[n]].y * h });
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+  const ls = P("left_shoulder"), rs = P("right_shoulder");
+  const lh = P("left_hip"), rh = P("right_hip");
+  const shC = mid(ls, rs), hipC = mid(lh, rh);
+  const neck = dist(shC, P("nose"));
+
+  const m = {
+    torso: dist(shC, hipC),
+    shoulderHalf: dist(ls, rs) / 2,
+    hipHalf: dist(lh, rh) / 2,
+    upper: (dist(ls, P("left_elbow")) + dist(rs, P("right_elbow"))) / 2,
+    fore:  (dist(P("left_elbow"), P("left_wrist")) + dist(P("right_elbow"), P("right_wrist"))) / 2,
+    thigh: (dist(lh, P("left_knee")) + dist(rh, P("right_knee"))) / 2,
+    shin:  (dist(P("left_knee"), P("left_ankle")) + dist(P("right_knee"), P("right_ankle"))) / 2,
+    neck,
+    head: neck * 0.55,
+  };
+  if (!(m.torso > 20)) return null;
+
+  if (!bodyLengths) {
+    bodyLengths = m;
+  } else {
+    for (const k of Object.keys(m)) {
+      const rate = m[k] > bodyLengths[k] ? 0.3 : 0.02;
+      bodyLengths[k] += rate * (m[k] - bodyLengths[k]);
+    }
+  }
+  return bodyLengths;
+}
+
+const GHOST_NEUTRAL = "rgba(0, 229, 255, 0.85)";
+
+/**
+ * Paints each outline segment by how that body part is doing: red where a joint
+ * is out of tolerance, green where it's within it. When every scored joint is
+ * correct the whole figure — torso, neck and head included — goes green.
+ */
+function ghostSegColor(jointResults) {
+  if (!jointResults) return null;
+  const scored = Object.entries(jointResults);
+  if (!scored.length) return null;
+
+  if (scored.every(([, r]) => r.ok)) return () => GREEN;
+
+  const bad = new Set(scored.filter(([, r]) => !r.ok).map(([j]) => j));
+  const good = new Set(scored.filter(([, r]) => r.ok).map(([j]) => j));
+  return (s, e) => {
+    if (bad.has(s) || bad.has(e)) return RED;
+    if (good.has(s) || good.has(e)) return GREEN;
+    return GHOST_NEUTRAL;
+  };
+}
+
+/**
+ * Draws the target pose as a dashed outline. Once the user is detected the
+ * outline is rebuilt from *their* limb lengths and pinned to their hips, so a
+ * correctly held pose lands right on top of it.
+ */
+/**
+ * The target pose in canvas pixels: built from the user's own limb lengths and
+ * pinned to their hips. Shared by the outline and the correction arrows.
+ */
+function buildTargetFigure(key, landmarks, w, h) {
+  const len = measureBody(landmarks, w, h);
+  if (!len) return null;
+
+  const figure = buildReference(YOGA_POSES[key].rig, len);
+  const hipPx = {
+    x: (landmarks[LM.left_hip].x + landmarks[LM.right_hip].x) / 2 * w,
+    y: (landmarks[LM.left_hip].y + landmarks[LM.right_hip].y) / 2 * h,
+  };
+  const refHip = { x: (figure.left_hip.x + figure.right_hip.x) / 2,
+                   y: (figure.left_hip.y + figure.right_hip.y) / 2 };
+
+  const placed = {};
+  for (const [name, p] of Object.entries(figure)) {
+    placed[name] = { x: hipPx.x + (p.x - refHip.x), y: hipPx.y + (p.y - refHip.y) };
+  }
+  FIGURE_HEAD.set(placed, headRadius(figure));
+  return placed;
+}
+
+function drawGhost(ctx, key, w, h, landmarks, jointResults, targetPx) {
+  let figure, tf;
+
+  if (landmarks) {
+    figure = targetPx || buildTargetFigure(key, landmarks, w, h);
+    if (!figure) return;
+    tf = { map: p => p, scale: 1 };   // already in canvas pixels
+  } else {
+    figure = REFERENCE[key];
+    tf = fitFigure(figure, w, h, Math.min(w, h) * 0.1);
+  }
+
+  const segColor = ghostSegColor(jointResults);
+  drawFigure(ctx, figure, tf, {
+    color: GHOST_NEUTRAL,
+    segColor,
+    lw: Math.max(3, Math.min(w, h) * 0.008),
+    dash: [14, 10],
+    joints: false,
+    alpha: segColor ? 0.8 : (landmarks ? 0.55 : 0.8),
+  });
+}
+
+document.getElementById("btn-begin").addEventListener("click", async () => {
+  stopDemoLoop();
+  showScreen("screen-track");
+  resetTrackPhase();
+  await startCamera();
+  isTracking = true;
+  startTrackingLoop();
+});
+
+document.getElementById("btn-back-guide").addEventListener("click", () => {
+  isTracking = false;
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+  stopCamera();
+  stepsSheet.classList.remove("visible");
+  resetTrackPhase();
+  showScreen("screen-guide");
+  startDemoLoop();
+});
+
+btnGhost.addEventListener("click", () => {
+  ghostOn = !ghostOn;
+  btnGhost.style.opacity = ghostOn ? "1" : "0.4";
+});
+
+// ── In-session recap: the same walkthrough, without leaving the camera ──
+document.getElementById("btn-how-to").addEventListener("click", () => {
+  const pose = YOGA_POSES[selectedPoseKey];
+  document.getElementById("sheet-title").textContent = `${pose.emoji}  ${pose.name}`;
+  document.getElementById("sheet-steps").innerHTML = renderSteps(pose);
+  stepsSheet.classList.add("visible");
+  requestAnimationFrame(() => drawDemo(document.getElementById("sheet-canvas"), selectedPoseKey, null));
+});
+
+document.getElementById("btn-resume").addEventListener("click", () => {
+  stepsSheet.classList.remove("visible");
+});
+
+function startTrackingLoop() {
+  let lastTimestamp = 0;
+
+  function renderFrame(timestamp) {
+    if (!isTracking) return;
+    animFrameId = requestAnimationFrame(renderFrame);
+
+    if (video.readyState < 2) return;
+
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (timestamp !== lastTimestamp && poseLandmarker) {
+      const result = poseLandmarker.detectForVideo(video, timestamp);
+      lastTimestamp = timestamp;
+
+      const landmarks = result.landmarks?.length ? result.landmarks[0] : null;
+      const pose = YOGA_POSES[selectedPoseKey];
+
+      // ── Get ready: hold the target outline until they're framed, then count in ──
+      if (trackPhase !== "live") {
+        const ready = landmarks && isFullBodyVisible(landmarks);
+
+        if (!ready) {
+          readySince = 0;
+          trackPhase = "framing";
+          setOverlay(landmarks ? "framing-seen" : "framing-none", "Get into frame",
+            landmarks ? "Step back until your whole body — head to ankles — is visible."
+                      : "Stand where the camera can see you, head to ankles.");
+        } else {
+          if (!readySince) readySince = timestamp;
+          if (trackPhase === "framing" && timestamp - readySince > 500) {
+            trackPhase = "countdown";
+            countdownStart = timestamp;
+          }
+          if (trackPhase === "countdown") {
+            const remaining = 3 - Math.floor((timestamp - countdownStart) / 1000);
+            if (remaining <= 0) {
+              trackPhase = "live";
+              hideOverlay();
+            } else {
+              setOverlay("countdown", "Match the outline",
+                `Moving into ${pose.name}`, remaining);
+            }
+          }
+        }
+
+        if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, landmarks);
+        if (landmarks && trackPhase !== "live") {
+          // dimmed skeleton — no corrections until tracking actually starts
+          ctx.globalAlpha = 0.35;
+          drawSkeleton(ctx, landmarks, w, h, {});
+          ctx.globalAlpha = 1;
+        }
+        return;
+      }
+
+      // ── Live: score the pose and show corrections ──
+      if (landmarks) {
+        const angles = computeAngles(landmarks);
+        const { score, results } = matchSinglePose(angles, pose.angles);
+
+        const target = buildTargetFigure(selectedPoseKey, landmarks, w, h);
+        if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, landmarks, results, target);
+        drawSkeleton(ctx, landmarks, w, h, results, target);
+        updateTrackingUI(pose.name, score, results, true);
+      } else {
+        if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
+        updateTrackingUI("", 0, {}, false);
+      }
+    }
+  }
+
+  requestAnimationFrame(renderFrame);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────
+const loadStatus = document.getElementById("load-status");
+
+async function init() {
+  loadStatus.textContent = "Loading vision runtime...";
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
+  );
+
+  loadStatus.textContent = "Downloading pose model (~13 MB)...";
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+      delegate: "GPU",
+    },
+    runningMode: "VIDEO",
+    numPoses: 1,
+  });
+
+  loadStatus.textContent = "Ready!";
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+
+  showScreen("screen-select");
+}
+
+init().catch(err => {
+  loadStatus.textContent = `Error: ${err.message}`;
+  console.error(err);
+});
+</script>
+</body>
+</html>
