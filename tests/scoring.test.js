@@ -2,7 +2,7 @@ import { suite, test, assert, assertEqual, assertClose, assertDeepEqual, assertS
 import {
   LM, computeAngles, matchSinglePose, reliableLandmarks, correctionsFor, calcAngle,
   bodyFrame, toBodyFrame, jointMeasurability, v3, TURN_LIMIT_DEGREES, facingWrongWay,
-  jointQuality, VerdictLatch, FALLOFF_MARGIN,
+  jointQuality, VerdictLatch, FALLOFF_MARGIN, figureLandmarks,
   sidesOf, mirrorPose, mirrorRig, mirrorJoint, mirrorText, SideSelector, buildReference,
 } from "../yoga_app/pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
@@ -781,4 +781,55 @@ test("a joint weighted zero is left out of the pose entirely", () => {
   assertEqual(ignored.coverage, 1, "nor missed from coverage");
   assert(!("left_elbow" in ignored.results), "nor available to be corrected");
   assertDeepEqual(correctionsFor(ignored.results, CORRECTION_TIPS), []);
+});
+
+// ─────────────────────────────────────────────────────────────
+// A known blind spot
+// ─────────────────────────────────────────────────────────────
+suite("what joint angles cannot see");
+
+test("Warrior II scores 100 with both arms pointing the wrong way", () => {
+  // Not a bug — a property of scoring joint angles, and the largest single
+  // limitation of this approach. See docs/LIMITS.md.
+  //
+  // An angle at a joint is the angle between two segments. Rotating a limb
+  // about an axis that one of those segments lies along does not change it. At
+  // the shoulder the second segment is the torso, which is roughly vertical, so
+  // swinging both arms about the body's vertical axis is very nearly invisible:
+  // arms straight out to the sides and arms straight out in front are the same
+  // eight numbers.
+  //
+  // If someone adds segment-direction scoring in the body frame — the obvious
+  // next piece of work, and the machinery is already there in toBodyFrame —
+  // this test should start failing. That would be the point.
+  const pose = YOGA_POSES.warrior2;
+  const P = buildReference(pose.rig, null, pose.view);
+
+  const swing = (figure, deg) => {
+    const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+    const pivot = v3.mid(figure.left_shoulder, figure.right_shoulder);
+    const out = {};
+    for (const [name, p] of Object.entries(figure)) {
+      if (!/elbow|wrist/.test(name)) { out[name] = p; continue; }
+      const dx = p.x - pivot.x, dz = (p.z || 0) - pivot.z;
+      out[name] = { x: pivot.x + dx * c + dz * s, y: p.y, z: pivot.z - dx * s + dz * c };
+    }
+    return out;
+  };
+
+  const scoreOf = (figure) => matchSinglePose(
+    computeAngles(figureLandmarks(figure), null, 1, 1),
+    pose.angles, { weights: pose.weights }).score;
+
+  assertEqual(scoreOf(P), 100, "as written");
+  for (const deg of [45, 90]) {
+    assertEqual(scoreOf(swing(P, deg)), 100,
+      `arms swung ${deg}° forward and it still reads perfect`);
+  }
+
+  // And the arms really have moved: a third of the body's height at the wrist.
+  const moved = swing(P, 90);
+  const shift = Math.hypot(moved.left_wrist.x - P.left_wrist.x,
+                           (moved.left_wrist.z || 0) - (P.left_wrist.z || 0));
+  assert(shift > 0.4, `the wrist only moved ${shift.toFixed(2)}`);
 });

@@ -114,7 +114,9 @@ joint whose angle would be read mostly off the camera's depth axis is reported
 as unmeasurable instead of scored — which also means a pose can declare that it
 only makes sense side-on, as Downward Dog does.
 
-`docs/ARCHITECTURE.md` has the full picture.
+`docs/ARCHITECTURE.md` has the full picture, and `docs/LIMITS.md` is an honest
+account of what the scoring cannot tell you — including the parts that no
+amount of work fixes without a second camera.
 
 ## Privacy
 

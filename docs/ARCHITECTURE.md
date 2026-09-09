@@ -24,6 +24,7 @@ Files:
 | `serve.py` | Local HTTPS dev server with a self-signed cert, no-cache headers and port fallback |
 | `LICENSE`, `README.md` | MIT, and the deploy-first README |
 | `tools/show-pose.sh` | What shape a rig actually makes: validation, derived angles, an ASCII sketch |
+| `docs/LIMITS.md` | What the scoring cannot see, and which of that is fixable |
 | `tests/` | Harness, fixtures and suites, run by `./tests/run.sh`; plus `smoke.sh`, a browser test of the parts `jsc` cannot see |
 
 `pose-core.js` is imported by both `index.html` and `pose-worker.js`, which is
