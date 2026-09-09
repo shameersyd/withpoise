@@ -294,15 +294,24 @@
       background: #000;
     }
 
-    #video {
+    /* The video and the overlay MUST agree on how the frame maps to the screen.
+       Both are replaced elements with the same intrinsic size — the canvas
+       backing store is resized to videoWidth × videoHeight every frame — so
+       identical box, identical object-fit and identical object-position means
+       identical mapping.
+
+       They used to disagree. The video was cover-cropped and the canvas, with
+       no object-fit, was stretched to fill. Whenever the stream's aspect ratio
+       differed from the viewport's — a 1280×720 stream on a portrait phone,
+       which is the normal case — every landmark, outline segment and correction
+       arrow was drawn somewhere the body was not. On a desktop window near 16:9
+       it looked perfect.
+
+       If you change one of these two rules, change the other. */
+    #video, #canvas {
       position: absolute;
       width: 100%; height: 100%;
       object-fit: cover;
-      transform: scaleX(-1);
-    }
-    #canvas {
-      position: absolute;
-      width: 100%; height: 100%;
       transform: scaleX(-1);
     }
 

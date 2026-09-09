@@ -625,3 +625,35 @@ test("resetting forgets the side", () => {
   sel.reset();
   assertEqual(sel.pick(cand(40, 90), 1), "mirrored", "a new session picks afresh");
 });
+
+// ─────────────────────────────────────────────────────────────
+// The one thing about the overlay that can be checked from here
+// ─────────────────────────────────────────────────────────────
+suite("overlay mapping");
+
+test("the video and the overlay canvas are fitted to the screen the same way", () => {
+  // Not a unit test so much as a tripwire. The video and the canvas are two
+  // replaced elements sharing an intrinsic size, and everything the app draws
+  // assumes they map to the screen identically. They did not: the video was
+  // object-fit: cover and the canvas, with none, was stretched — so on any
+  // phone whose aspect ratio differed from the camera's, every landmark and
+  // every correction arrow was drawn somewhere the body was not, while looking
+  // perfect in a 16:9 desktop window.
+  //
+  // Nothing here can render CSS, so this reads the rule and asserts the two
+  // selectors are still styled as one block. Crude, and it would have caught
+  // the bug.
+  // Comments carry commas, which would otherwise read as selector lists.
+  const css = readFile("yoga_app/index.html").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // Every rule whose selector list names either element on its own.
+  const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map(m => ({ selectors: m[1].split(",").map(x => x.trim()), body: m[2] }))
+    .filter(b => b.selectors.includes("#video") || b.selectors.includes("#canvas"));
+
+  assertEqual(blocks.length, 1, "the two must be styled by exactly one rule");
+  assertSameSet(blocks[0].selectors, ["#video", "#canvas"],
+    "and that rule must cover both of them");
+  assert(/object-fit:\s*cover/.test(blocks[0].body),
+    "which must set object-fit: cover, matching how the video is fitted");
+});
