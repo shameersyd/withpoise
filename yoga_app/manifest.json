@@ -4,7 +4,7 @@
   "description": "Real-time yoga pose tracker with AI form correction",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0a0a1a",
   "theme_color": "#0a0a1a",
   "icons": [

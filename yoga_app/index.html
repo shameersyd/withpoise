@@ -1091,6 +1091,37 @@ async function startCamera() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Screen wake lock
+//
+// A held pose is a minute of not touching the phone, which is exactly what the
+// screen dimmer waits for. Requested when tracking starts and re-requested when
+// the page comes back, because the lock is dropped automatically whenever the
+// document is hidden and is not restored on its own.
+// ─────────────────────────────────────────────────────────────
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!("wakeLock" in navigator) || wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch {
+    wakeLock = null;   // refused, or the tab was not visible. Not worth a fuss.
+  }
+}
+
+function releaseWakeLock() {
+  if (!wakeLock) return;
+  const held = wakeLock;
+  wakeLock = null;
+  held.release().catch(() => { /* already gone */ });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && isTracking) requestWakeLock();
+});
+
 function stopCamera() {
   if (cameraStream) {
     cameraStream.getTracks().forEach(t => t.stop());
@@ -1213,6 +1244,7 @@ function endSession() {
     isTracking = false;
     if (animFrameId) cancelAnimationFrame(animFrameId);
     stopCamera();
+    releaseWakeLock();
     resetTrackPhase();
     showScreen("screen-select");
   }, 2800);
@@ -1229,6 +1261,7 @@ document.getElementById("btn-session-start").addEventListener("click", async () 
   isTracking = true;
   resetTrackPhase();
   await startCamera();
+  requestWakeLock();
   startTrackingLoop();
 });
 
@@ -1736,6 +1769,7 @@ document.getElementById("btn-begin").addEventListener("click", async () => {
   isTracking = true;          // so resetTrackPhase can park us on "loading"
   resetTrackPhase();
   await startCamera();
+  requestWakeLock();
   startTrackingLoop();
 });
 
@@ -1745,6 +1779,7 @@ document.getElementById("btn-back-guide").addEventListener("click", () => {
   isTracking = false;
   if (animFrameId) cancelAnimationFrame(animFrameId);
   stopCamera();
+  releaseWakeLock();
   stepsSheet.classList.remove("visible");
   resetTrackPhase();
   showScreen("screen-guide");
@@ -1769,6 +1804,15 @@ document.getElementById("btn-how-to").addEventListener("click", () => {
 
 document.getElementById("btn-resume").addEventListener("click", () => {
   stepsSheet.classList.remove("visible");
+});
+
+// The demo on the guide screen redraws every frame and looks after itself; the
+// one on the recap sheet is drawn once when the sheet opens, so a rotation
+// underneath it would leave a figure fitted to the old width.
+window.addEventListener("resize", () => {
+  if (!stepsSheet.classList.contains("visible")) return;
+  drawDemo(document.getElementById("sheet-canvas"),
+           currentVariant || primary(selectedPoseKey), null);
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -1874,6 +1918,10 @@ function startTrackingLoop() {
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+      // Limb lengths are measured in these pixels. Rotating the phone can hand
+      // back a stream of different dimensions, and a target outline built from
+      // the old ones would be the wrong size on the new frame.
+      resetBodyLengths();
     }
 
     sendFrameToWorker(timestamp);
