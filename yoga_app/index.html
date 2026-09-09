@@ -707,6 +707,7 @@ import {
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 import { Coach, HoldTimer, Session, rankCorrections } from "./coach.js";
 import { Voice } from "./voice.js";
+import { FrameBudget } from "./pacing.js";
 
 // Every pose, both ways round. An asymmetric pose is written for one side and
 // its mirror is derived, so there is one definition to keep correct rather than
@@ -1350,6 +1351,10 @@ let frameSentAt = 0;
 let stalls = 0;
 let latestResult = null;
 
+// Detection is paced rather than run flat out — see pacing.js.
+const budget = new FrameBudget();
+let shownHz = 0;
+
 // A frame that has not come back in this long is not coming back. The worker
 // now replies on every path, so this should never fire — but "should never
 // fire" is exactly what was believed about the paths that wedged the app, and
@@ -1373,6 +1378,7 @@ function startWorker(model) {
   frameSentAt = 0;
   stalls = 0;
   latestResult = null;
+  budget.reset();
   currentModel = model;
   modelStatus = { state: "loading", message: "Starting…" };
   if (isTracking) trackPhase = "loading";
@@ -1383,7 +1389,8 @@ function startWorker(model) {
   poseWorker.onmessage = (e) => {
     const msg = e.data;
     if (msg.type === "status") {
-      modelStatus = { state: msg.state, message: msg.message || "" };
+      modelStatus = { state: msg.state, message: msg.message || "",
+                      delegate: msg.delegate || modelStatus.delegate };
       workerReady = msg.state === "ready";
       if (msg.state === "ready") {
         loadStatus.textContent = "Ready!";
@@ -1402,6 +1409,7 @@ function startWorker(model) {
       latestResult = msg;
       frameInFlight = false;
       stalls = 0;
+      budget.record(msg.inference);
     }
   };
 
@@ -1426,7 +1434,9 @@ function sendFrameToWorker(now) {
     }
   }
   if (!workerReady || frameInFlight || video.readyState < 2) return;
+  if (!budget.due(now)) return;
 
+  budget.markSent(now);
   frameInFlight = true;
   frameSentAt = now;
   createImageBitmap(video)
@@ -1828,6 +1838,7 @@ function startTrackingLoop() {
     }
 
     sendFrameToWorker(timestamp);
+    if (budget.hz !== shownHz) { shownHz = budget.hz; renderModelToggles(); }
 
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
@@ -2009,10 +2020,16 @@ function renderModelToggles() {
   document.querySelectorAll("[data-model-note]").forEach(note => {
     const busy = modelStatus.state === "loading";
     note.classList.toggle("busy", busy);
+    // When it is running, say where and how fast. Which delegate the landmarker
+    // fell back to is the biggest single factor in the frame rate, and it used
+    // to be announced once in a message that scrolled past and then vanished.
+    const running = modelStatus.delegate && shownHz
+      ? ` Running on the ${modelStatus.delegate} at ${shownHz} Hz.`
+      : "";
     note.textContent = modelStatus.state === "error"
       ? `Model failed to load: ${modelStatus.message}`
       : busy ? (modelStatus.message || "Loading…")
-             : MODEL_NOTES[currentModel];
+             : MODEL_NOTES[currentModel] + running;
   });
 }
 

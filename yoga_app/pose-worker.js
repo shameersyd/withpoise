@@ -39,6 +39,7 @@ const frames = new FrameProcessor();
 // ─────────────────────────────────────────────────────────────
 let landmarker = null;
 let currentModel = null;
+let currentDelegate = null;
 
 async function createLandmarker(vision, model, delegate) {
   return PoseLandmarker.createFromOptions(vision, {
@@ -57,18 +58,22 @@ async function init(model) {
 
     const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
+    // GPU first, CPU if the device has no usable WebGL inside a worker. Which
+    // one we ended up on is reported, because it is the single biggest factor
+    // in how fast this runs and it was previously invisible.
     try {
       landmarker = await createLandmarker(vision, which, "GPU");
+      currentDelegate = "GPU";
     } catch (gpuError) {
-      // Some devices have no usable WebGL inside a worker.
       postMessage({ type: "status", state: "loading", model: which,
                     message: "GPU unavailable — falling back to CPU…" });
       landmarker = await createLandmarker(vision, which, "CPU");
+      currentDelegate = "CPU";
     }
 
     currentModel = which;
     frames.reset();
-    postMessage({ type: "status", state: "ready", model: which });
+    postMessage({ type: "status", state: "ready", model: which, delegate: currentDelegate });
   } catch (err) {
     postMessage({ type: "status", state: "error", model: which,
                   message: err && err.message ? err.message : String(err) });
