@@ -153,6 +153,9 @@
       z-index: 40;
     }
     #session-bar.visible { display: flex; }
+    /* The bar is fixed, so the grid has to make room or it sits on the last
+       card — which is the card you are most likely to be reaching for. */
+    #screen-select.queueing .pose-grid { padding-bottom: 110px; }
     #session-count { flex: 1; font-size: 14px; color: var(--text-secondary); }
     #session-count b { color: var(--text-primary); font-weight: 600; }
     #btn-session-start {
@@ -1117,6 +1120,7 @@ function renderQueue() {
   });
   const bar = document.getElementById("session-bar");
   bar.classList.toggle("visible", queued.length > 0);
+  document.getElementById("screen-select").classList.toggle("queueing", queued.length > 0);
   const holds = queued.reduce((n, k) => n + (YOGA_POSES[k].symmetric ? 1 : 2), 0);
   document.getElementById("session-count").innerHTML =
     `<b>${queued.length}</b> pose${queued.length === 1 ? "" : "s"} · ${holds} holds`;

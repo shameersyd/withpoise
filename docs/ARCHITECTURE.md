@@ -4,8 +4,8 @@ A survey of `yoga_app/` and `serve.py` as they stand today. Descriptive only:
 nothing here is a proposal, and nothing was changed to write it.
 
 > **Currency.** Written at Phase 0 of `CLAUDE_CODE_BRIEF.md` and updated at the
-> end of Phase 1. Sections 1–4 describe the code as it stands; section 5 marks
-> what Phase 1 fixed and what is still open.
+> end of Phases 1 and 2. Sections 1–4 describe the code as it stands; section 5
+> marks what has been fixed and what is still open.
 
 Files:
 
@@ -14,6 +14,8 @@ Files:
 | `yoga_app/index.html` | Markup, CSS, and one inline `<script type="module">`: the DOM, the canvas, the camera and all session state |
 | `yoga_app/pose-core.js` | The pure half — angle math, reliability, camera geometry, scoring, mirroring, smoothing, latching. No DOM, no canvas, no worker |
 | `yoga_app/poses.js` | The five pose definitions and the correction phrasings |
+| `yoga_app/coach.js` | What to say and when, plus the hold timer and the session queue. Pure: time is passed in |
+| `yoga_app/voice.js` | `speechSynthesis` and the completion tone, and the remembered on/off switch |
 | `yoga_app/pose-worker.js` | MediaPipe landmarker and the detect loop, off the main thread |
 | `yoga_app/sw.js` | Service worker: app shell + CDN/model caching |
 | `yoga_app/manifest.json` | PWA manifest |
@@ -62,6 +64,8 @@ getUserMedia ──▶ <video> ──▶ rAF: renderFrame()
                                      verdicts.apply(match.results)
                                      buildTargetFigure(variant, …)
                                      drawGhost / drawSkeleton / updateTrackingUI
+                                     holdTimer.update(solid, now)
+                                     coach.update(state, now) → voice.speak
 ```
 
 ### Camera in
@@ -177,6 +181,28 @@ Three consumers, all in the same tick:
   (percentage, verdict string, "N of M joints aligned · K hidden"), the
   corrections list (max 5 phrases from `CORRECTION_TIPS`), and the green
   full-screen `perfect-glow` at ≥95% with nothing hidden.
+
+### Score → speech
+
+The coaching layer is driven from the same tick, and is deliberately the only
+part of the app allowed to interrupt the user.
+
+- `holdTimer.update(solid, now)` — `solid` is `score ≥ 88 && coverage ≥ 0.7`.
+  Not 100%: a body held still is never exactly on its targets, and coverage has
+  to be in it because you cannot certify a hold you could not see. A lapse
+  pauses the clock; only a lapse outlasting `graceMs` restarts it.
+- `coach.update(state, now)` returns **at most one** utterance per frame, or
+  `null`, which is the usual answer. Priority runs: hold completion → countdown
+  tick → the pose coming good → framing → one correction.
+- Corrections stay on a single joint until it is acted on, ranked by
+  `weight × (1 − quality)` so the worst fault leads. The on-screen panel uses
+  the same ranking.
+- `voice.speak` cancels anything still queued before speaking, so a backlog can
+  never build — by the time three corrections have queued the body has moved on
+  and all three are lies.
+
+`Session` holds the queue. An asymmetric pose owes a hold on each side, in
+whichever order the user chooses, since the side is detected rather than asked.
 
 ### Session phase machine
 
@@ -340,6 +366,9 @@ noted at the end.
 | `ghostOn` | ghost button | `renderFrame()` |
 | `overlayState` | `setOverlay()`, `hideOverlay()`, `resetTrackPhase()` | `setOverlay()`, `hideOverlay()` timeout |
 | `bodyLengths` | `measureBody()`, `resetBodyLengths()` | `measureBody()`, `buildTargetFigure()` |
+| `queued` | the pose-card queue buttons | `renderQueue()`, session start |
+| `session` | session start, `advanceSession()`, `endSession()` | `renderFrame()`, badge, advance |
+| `completedAt` | `renderFrame()` on a completed hold | `renderFrame()`, to delay the advance |
 | `currentVariant` | `renderFrame()`, `resetTrackPhase()` | recap sheet, ghost fallback |
 | `demoStep` | `setDemoStep()` | demo loop, dots, step list |
 | `demoRAF` | `startDemoLoop()`, `stopDemoLoop()` | both |
@@ -353,6 +382,9 @@ are cleared together by `resetTrackPhase()`:
 | | holds |
 |---|---|
 | `verdicts` (`VerdictLatch`) | the latched red/green verdict per joint |
+| `holdTimer` (`HoldTimer`) | how much of the current hold is banked |
+| `coach` (`Coach`) | what has been said and when, so it is not said again |
+| `voice` (`Voice`) | the speech queue, the audio context, the remembered toggle |
 | `sideSelector` (`SideSelector`) | which side is being tracked, and any pending challenge to it |
 | `FIGURE_HEAD` (`WeakMap`, in `pose-core.js`) | head radius per figure, keyed by the figure object |
 
@@ -375,8 +407,12 @@ an explicit `{type:"reset"}` message or a model reload.
 
 ### Persisted state
 
-**None.** No `localStorage`, no cookies, no IndexedDB. Model choice, camera
-choice and everything else reset on reload.
+One key: `yoga.audio` in `localStorage`, `"on"` or `"off"`. Every read and write
+is wrapped, because `localStorage` throws outright in some privacy modes, and
+the default when it does is on.
+
+Nothing else survives a reload — not the model choice, the camera choice, or a
+part-finished session.
 
 ---
 
@@ -396,7 +432,9 @@ tests that hold each one down are named after it.
 | Camera angle was scored as bad form — a correct Triangle 80° off-axis lost 37 points | Joints reading off the depth axis are reported `uncertain` and the user is told to turn; 30° off-axis now scores identically to head-on |
 | `calcAngle` added an epsilon to the *product* of the magnitudes, so a straight limb read 179.9° in pixels and 179.7° in metres | Floored divisor; exactly 180° in both |
 | `VIS_THRESHOLD` declared in two files that could not import each other | One definition in `pose-core.js`, imported by both |
-| 1926 lines in one HTML file, with the entire scoring core untestable | Pure half split into `pose-core.js`; 89 tests under `./tests/run.sh` |
+| 1926 lines in one HTML file, with the entire scoring core untestable | Pure half split into `pose-core.js` and `coach.js`; 125 tests under `./tests/run.sh` |
+| The video was `object-fit: cover` and the canvas, having none, was stretched — so on any phone whose aspect ratio differed from the camera's, every landmark and arrow was drawn where the body was not | One rule for both, and a test that they stay one rule |
+| All feedback was visual, so the app only worked if you broke the pose to read it | Spoken coaching, a hold timer with a chime, and a hands-free session queue |
 | `updateTrackingUI` called with the wrong arity, working by accident | Fixed |
 | A stale doc comment stacked above `buildTargetFigure` | Removed |
 
@@ -404,82 +442,69 @@ tests that hold each one down are named after it.
 
 Ordered roughly by how much damage each one does.
 
-1. **The overlay canvas can be misaligned with the video image.**
-   `#video` is `object-fit: cover` while `#canvas` is sized `100%/100%` with a
-   backing store of `videoWidth × videoHeight` and no `object-fit`, so it
-   **stretches** where the video **crops**. Whenever the stream's aspect ratio
-   differs from the viewport's — the normal case for a 1280×720 request on a
-   portrait phone — the skeleton, the target outline and every correction arrow
-   are drawn at systematically wrong screen positions. Invisible in a squarish
-   window and glaring on a phone. *Not in the brief; it undercuts all of Phase
-   1's work on where the arrows point.*
-
-2. **A worker-side detect error deadlocks tracking silently.**
+1. **A worker-side detect error deadlocks tracking silently.**
    `handleFrame()`'s `catch` posts a `status` message and returns without
    posting a `result`, so `frameInFlight` is never cleared and no further frames
    are sent. The render loop keeps painting `latestResult` — a frozen skeleton,
    scored as live. The `!landmarker` early return has the same shape. *Phase 3.*
 
-3. **No handling of "the body left frame" as an event.** Losing the torso only
-   matters before `live`; once live, joints drop out of the denominator and the
-   session carries on. Coverage now makes this visible in the UI, but there is
-   still no pause and no way back to `framing`. *Phase 3.*
+2. **Leaving the frame mid-pose still is not an event.** A hold now breaks when
+   the body disappears entirely, and coverage makes a partly-visible body
+   visible in the UI. But *scoring* carries on regardless: joints drop out of
+   the denominator, and there is no pause and no way back to `framing`. *Phase 3.*
 
-4. **Rear camera flips the anatomy, not just the pixels.** The flip handler
+3. **Rear camera flips the anatomy, not just the pixels.** The flip handler
    swaps `scaleX(-1)` on both video and canvas, keeping the overlay registered
    to the image. But the rig's `perp` vector assumes the user faces the camera.
    Side detection now partly papers over this — a body filmed from behind
    matches the mirrored variant, so the *shape* is right — but the side it
    reports is then the wrong one, and the arrows still point the wrong way.
 
-5. **Target angles duplicate the rig by hand.** Every pose states the same shape
+4. **Target angles duplicate the rig by hand.** Every pose states the same shape
    twice, once as segment directions and once as joint angles, with a comment
    claiming the second is derived from the first. Nothing derives it and nothing
    checks it. The fixtures now prove the two currently agree, which is what
    makes deriving them a safe change. *Phase 4.*
 
-6. **The `rig` grammar is overloaded.** A two-element array means `[theta, phi]`
+5. **The `rig` grammar is overloaded.** A two-element array means `[theta, phi]`
    at the torso and `[upperSegment, lowerSegment]` inside a limb. No limb can
    currently express a `phi` at all — which is why every pose in the file is
    planar. *Phase 4.*
 
-7. **`currentModel` exists in both modules** with different meanings, and the
+6. **`currentModel` exists in both modules** with different meanings, and the
    model picker markup is duplicated verbatim in two places, kept in sync by
    `renderModelToggles()` querying `[data-model-seg]` globally.
 
-8. **Per-frame allocation in the hot loop.** `reliableLandmarks` builds a `Set`
+7. **Per-frame allocation in the hot loop.** `reliableLandmarks` builds a `Set`
    and several closures per tick, and the side work now runs `matchSinglePose`
    twice. Negligible next to inference, but it is garbage on every frame.
 
-9. **All feedback is visual.** No audio of any kind. The core usability problem:
-   you cannot look at a phone while holding Triangle. *Phase 2.*
-
-10. **`inference` is measured and posted, then discarded.** No frame budget, no
+8. **`inference` is measured and posted, then discarded.** No frame budget, no
     throttling, no adaptive rate. *Phase 3.*
 
-11. **Model download shows no progress.** A stalled download is
+9. **Model download shows no progress.** A stalled download is
     indistinguishable from a slow one, and there is no retry. *Phase 3.*
 
-12. **No wake lock**, so the screen sleeps mid-hold. *Phase 3.*
+10. **No wake lock**, so the screen sleeps mid-hold. *Phase 3.*
 
-13. **No orientation handling.** Rotating the device changes the viewport but
+11. **No orientation handling.** Rotating the device changes the viewport but
     nothing re-derives the canvas mapping — see #1, which it makes worse.
     *Phase 3.*
 
-14. **`alert()` on camera denial** blocks the page and cannot be recovered from
+12. **`alert()` on camera denial** blocks the page and cannot be recovered from
     without a reload.
 
-15. **Service worker paths are host-root-absolute** — `ASSETS = ["/",
+13. **Service worker paths are host-root-absolute** — `ASSETS = ["/",
     "/index.html", ...]` — so the app shell fails to precache under any subpath
-    deploy, the common case for a static host. `pose-core.js` and `poses.js` are
-    also missing from the precache list and from the network-first `isAppCode`
-    test, so they will be served stale after an edit. The `RUNTIME_CACHE`
-    holding the 13–30 MB model has no eviction. *Phase 3.*
+    deploy, which is the common case for a static host. The list itself has
+    fallen behind the module graph twice and is now guarded by a test, but the
+    guard cannot fix the paths. The `RUNTIME_CACHE` holding the 13–30 MB model
+    has no eviction. *Phase 3.*
 
-16. **No safety disclaimer.** The app tells people how to move their spine.
+14. **No safety disclaimer.** The app tells people how to move their spine.
     *Phase 5.*
 
-17. **The GPU→CPU fallback is announced through a transient `status` message**
+15. **The GPU→CPU fallback is announced through a transient `status` message**
     and is invisible afterwards, so a user on the slow path never learns why.
 
 ### `serve.py`
@@ -501,11 +526,13 @@ Ordered roughly by how much damage each one does.
 
 Two places now account for most of it:
 
-- **The image-space ↔ canvas-space mapping** (#1, #4, #13) — one incorrect
-  assumption that everything drawn inherits, and the largest remaining
+- **The frame pump's error paths** (#1, #2) — the loop is happy to keep painting
+  a result that will never be replaced, and a worker that has stopped answering
+  looks exactly like a person holding very still. This is now the largest
   correctness problem in the app.
-- **The frame pump's error paths** (#2, #3, #10) — the loop is happy to keep
-  painting a result that will never be replaced.
+- **The pose schema** (#4, #5) — one shape written down twice, in a grammar that
+  means two different things at two levels. Phase 4's territory.
 
-The scoring core is no longer on that list, and the reason is #12 in the fixed
-table rather than any of the individual fixes above it.
+The scoring core and the overlay mapping are no longer on this list. The reason
+in both cases is the test suite rather than any individual fix above it: the
+overlay bug had been shipped and looked at and not seen.
