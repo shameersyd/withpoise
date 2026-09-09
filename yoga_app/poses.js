@@ -1,6 +1,11 @@
 /**
  * Pose definitions.
  *
+ * `angles` gives each scored joint [ target°, tolerance° ]. `weights` says how
+ * much of the pose that joint actually is — an unweighted mean lets a straight
+ * elbow count for as much as a collapsed standing leg. Weights are relative
+ * within a pose; only their ratios matter.
+ *
  * Extracted from index.html so tests can import them. The schema is documented
  * where the fields are first used; Phase 4 of the improvement brief turns this
  * into a validated, declarative format.
@@ -48,6 +53,18 @@ export const YOGA_POSES = {
       left_shoulder:[17,20], right_shoulder:[17,20],
       left_elbow:[170,20], right_elbow:[170,20],
     },
+    // Mountain is a posture, not a shape: the legs and the line of the spine
+    // are the pose, and the arms are just hanging there.
+    weights: {
+      left_knee: 2,
+      right_knee: 2,
+      left_hip: 2,
+      right_hip: 2,
+      left_shoulder: 1,
+      right_shoulder: 1,
+      left_elbow: 1,
+      right_elbow: 1,
+    },
   },
   warrior1: {
     name: "Warrior I",
@@ -76,6 +93,18 @@ export const YOGA_POSES = {
       left_hip:[108,25], right_hip:[158,25],
       left_shoulder:[172,25], right_shoulder:[172,25],
       left_elbow:[175,22], right_elbow:[175,22],
+    },
+    // Both legs carry the pose — the bent front knee and the straight back one.
+    // Square hips are the thing everyone gets wrong. Elbows barely matter.
+    weights: {
+      left_knee: 3,
+      right_knee: 3,
+      left_hip: 2,
+      right_hip: 2,
+      left_shoulder: 2,
+      right_shoulder: 2,
+      left_elbow: 1,
+      right_elbow: 1,
     },
   },
   warrior2: {
@@ -106,6 +135,18 @@ export const YOGA_POSES = {
       left_shoulder:[92,25], right_shoulder:[92,25],
       left_elbow:[175,20], right_elbow:[175,20],
     },
+    // As Warrior I, plus the arm line, which is half of what the pose looks
+    // like and is held at shoulder height for a long time.
+    weights: {
+      left_knee: 3,
+      right_knee: 3,
+      left_hip: 2,
+      right_hip: 2,
+      left_shoulder: 2,
+      right_shoulder: 2,
+      left_elbow: 1,
+      right_elbow: 1,
+    },
   },
   tree: {
     name: "Tree Pose",
@@ -135,6 +176,18 @@ export const YOGA_POSES = {
       left_shoulder:[172,25], right_shoulder:[172,25],
       left_elbow:[175,20], right_elbow:[175,20],
     },
+    // The standing leg and level hips are the whole balance. The raised knee
+    // opening out matters next. The arms overhead are the least of it.
+    weights: {
+      left_knee: 3,
+      right_knee: 2,
+      left_hip: 3,
+      right_hip: 3,
+      left_shoulder: 1,
+      right_shoulder: 1,
+      left_elbow: 1,
+      right_elbow: 1,
+    },
   },
   triangle: {
     name: "Triangle Pose",
@@ -163,6 +216,18 @@ export const YOGA_POSES = {
       left_hip:[93,25], right_hip:[157,25],
       left_shoulder:[92,25], right_shoulder:[92,25],
       left_elbow:[175,20], right_elbow:[175,20],
+    },
+    // Both legs straight is the instruction people break, and the hinge is at
+    // the hip rather than the waist. The arm line follows from those.
+    weights: {
+      left_knee: 3,
+      right_knee: 3,
+      left_hip: 3,
+      right_hip: 2,
+      left_shoulder: 2,
+      right_shoulder: 2,
+      left_elbow: 1,
+      right_elbow: 1,
     },
   },
 };

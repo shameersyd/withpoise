@@ -131,6 +131,30 @@ export function reliableLandmarks(landmarks) {
 // ─────────────────────────────────────────────────────────────
 // Pose Matching (single pose)
 // ─────────────────────────────────────────────────────────────
+// How far beyond its tolerance a joint has to go before it counts for nothing.
+// Inside tolerance a joint is simply correct; past tolerance + margin it is
+// simply wrong; in between the score slides.
+export const FALLOFF_MARGIN = 25;
+
+/**
+ * How right a joint is, from 1 to 0.
+ *
+ * The old answer was a boolean, and the boundary showed. A knee resting on its
+ * tolerance flipped the outline red and green frame to frame, and each flip
+ * moved the total by a full eighth. Worse, it made every degree inside the
+ * tolerance worth nothing and the first degree outside it worth everything,
+ * which is not how a body works.
+ *
+ * Smoothstep rather than a straight line, so the curve is flat where it meets 1
+ * and flat where it meets 0: no kink at either end for the score to catch on.
+ */
+export function jointQuality(diff, tolerance, margin = FALLOFF_MARGIN) {
+  if (diff <= tolerance) return 1;
+  if (margin <= 0) return 0;
+  const t = Math.min(1, (diff - tolerance) / margin);
+  return 1 - t * t * (3 - 2 * t);
+}
+
 /**
  * Score only the joints we can actually judge. A joint is set aside for one of
  * two different reasons, and the difference matters to the user:
@@ -142,17 +166,31 @@ export function reliableLandmarks(landmarks) {
  * your feet out of shot, and what stops the app inventing a fault out of the
  * one coordinate it cannot see.
  *
- * opts: { reliable: Set<string>, measurability: object }
+ * Joints carry weights, because they are not equally the pose. Tree is about a
+ * straight standing leg and level hips; the elbow is decoration. An unweighted
+ * mean says otherwise and lets a good pose be dragged down by a detail.
+ *
+ * `coverage` is the share of the pose's total weight that was actually judged.
+ * A score is a fraction of what could be seen, so without coverage beside it a
+ * user with their legs out of frame reads 100% for holding half a pose.
+ *
+ * opts: { reliable: Set<string>, measurability: object,
+ *         weights: { [joint]: number }, margin: number }
  */
 export function matchSinglePose(angles, template, opts = {}) {
-  const { reliable = null, measurability = null } = opts;
+  const { reliable = null, measurability = null, weights = null,
+          margin = FALLOFF_MARGIN } = opts;
   const results = {};
   const unscored = [];
   const uncertain = [];
+  const weightOf = (joint) => (weights && weights[joint] != null ? weights[joint] : 1);
+
   let correct = 0, total = 0;
+  let earned = 0, judgedWeight = 0, totalWeight = 0;
 
   for (const [joint, [target, tolerance]] of Object.entries(template)) {
     if (!(joint in angles)) continue;
+    totalWeight += weightOf(joint);
 
     if (reliable) {
       const needed = ANGLE_JOINTS[joint] || [];
@@ -172,12 +210,22 @@ export function matchSinglePose(angles, template, opts = {}) {
     const diff = Math.abs(actual - target);
     const ok = diff <= tolerance;
     const direction = actual - target;
-    results[joint] = { actual, target, tolerance, diff, ok, direction };
+    const quality = jointQuality(diff, tolerance, margin);
+    const weight = weightOf(joint);
+
+    results[joint] = { actual, target, tolerance, diff, ok, direction, quality, weight };
     if (ok) correct++;
+    earned += quality * weight;
+    judgedWeight += weight;
   }
 
-  const score = total > 0 ? (correct / total) * 100 : 0;
-  return { score, results, unscored, uncertain, scored: total };
+  const score = judgedWeight > 0 ? (earned / judgedWeight) * 100 : 0;
+  return {
+    score, results, unscored, uncertain, scored: total,
+    aligned: correct,
+    coverage: totalWeight > 0 ? judgedWeight / totalWeight : 0,
+    judgedWeight, totalWeight,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -536,4 +584,50 @@ export function smooth(points, filters, tSeconds, visibilities) {
     }
   }
   return out;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Hysteresis
+// ─────────────────────────────────────────────────────────────
+/**
+ * Latched per-joint verdicts, so the outline stops strobing.
+ *
+ * The score is smooth now, but the outline is still binary — deliberately, a
+ * limb is either where it should be or it is not, and a limb fading through
+ * amber says nothing useful at arm's length. A single threshold on a joint
+ * sitting exactly on tolerance flickers at frame rate, which is worse than
+ * either colour.
+ *
+ * So the verdict is latched: a joint has to be clearly right to turn green and
+ * clearly wrong to turn red again, and in the gap between it keeps whatever it
+ * last was. Driven by the graded quality rather than the raw boolean, which is
+ * what gives the gap a width.
+ */
+export class VerdictLatch {
+  constructor({ enter = 0.95, leave = 0.55 } = {}) {
+    this.enter = enter;
+    this.leave = leave;
+    this.state = new Map();
+  }
+
+  reset() { this.state.clear(); }
+
+  /**
+   * Returns a copy of `results` with `ok` replaced by the latched verdict.
+   * Joints missing from this frame keep their state, so a joint that drops out
+   * for a frame and comes back does not flash.
+   */
+  apply(results) {
+    const out = {};
+    for (const [joint, res] of Object.entries(results)) {
+      const was = this.state.get(joint);
+      let now;
+      if (res.quality >= this.enter) now = true;
+      else if (res.quality <= this.leave) now = false;
+      else now = was === undefined ? res.ok : was;
+      this.state.set(joint, now);
+      out[joint] = { ...res, ok: now };
+    }
+    return out;
+  }
 }

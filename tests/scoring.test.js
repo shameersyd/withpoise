@@ -2,6 +2,7 @@ import { suite, test, assert, assertEqual, assertClose, assertDeepEqual, assertS
 import {
   LM, computeAngles, matchSinglePose, reliableLandmarks, correctionsFor, calcAngle,
   bodyFrame, toBodyFrame, jointMeasurability, v3, TURN_LIMIT_DEGREES,
+  jointQuality, VerdictLatch, FALLOFF_MARGIN,
 } from "../yoga_app/pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "../yoga_app/poses.js";
 
@@ -16,7 +17,8 @@ function score(key, variantName) {
   const reliable = reliableLandmarks(v.image);
   const angles = computeAngles(v.world, v.image, 1280, 720);
   const measurability = jointMeasurability(v.world);
-  const match = matchSinglePose(angles, YOGA_POSES[key].angles, { reliable, measurability });
+  const match = matchSinglePose(angles, YOGA_POSES[key].angles,
+    { reliable, measurability, weights: YOGA_POSES[key].weights });
   const corrections = correctionsFor(match.results, CORRECTION_TIPS);
   return { ...match, corrections, meta: v, reliable, frame: bodyFrame(v.world) };
 }
@@ -50,13 +52,18 @@ for (const key of POSES) {
 // Each fixture bends one straight leg's shin. That changes exactly one joint
 // angle: the hip is measured shoulder-hip-knee and never touches the ankle.
 // ─────────────────────────────────────────────────────────────
+// What one bent shin costs, per pose. These differ because the joint's weight
+// differs: the same fault is worth more in Tree, where the standing leg is the
+// pose, than in Mountain, where it is one of four equally weighted essentials.
+const FAULT_SCORE = { mountain: 83.33, warrior1: 87.85, warrior2: 87.85, tree: 80.00 };
+
 for (const key of POSES.filter(k => k !== "triangle")) {
   test(`${key}: a bent shin fails that knee and only that knee`, () => {
     const r = score(key, "fault");
-    const expected = r.meta.fault;
-    assertDeepEqual(failing(r), [expected.joint], "failing joints");
+    assertDeepEqual(failing(r), [r.meta.fault.joint], "failing joints");
     assertEqual(r.scored, 8, "all eight still scored");
-    assertClose(r.score, 87.5, 0.001, "seven of eight");
+    assertEqual(r.coverage, 1, "and all eight still counted");
+    assertClose(r.score, FAULT_SCORE[key], 0.01, "score");
   });
 
   test(`${key}: the fault emits exactly the expected instruction`, () => {
@@ -65,19 +72,19 @@ for (const key of POSES.filter(k => k !== "triangle")) {
   });
 }
 
-test("triangle: a fault that leaves the frame RAISES the score to 100", () => {
-  // Not a quirk of the fixture — the pathology itself. Bending Triangle's front
-  // shin swings the ankle below the bottom of the frame, so `reliable` drops the
-  // ankle, the knee joint goes unscored, and the denominator shrinks to match.
-  // The user is now doing the pose *worse* and being told they are perfect.
+test("triangle: a fault that leaves the frame is reported as unseen, not as perfect", () => {
+  // Bending Triangle's front shin swings the ankle out of the frame, so the
+  // knee cannot be judged at all. It used to be dropped from the denominator
+  // and the score rose from 87.5 to 100 — doing the pose worse scored better.
   //
-  // Phase 1b changes this. When it does, this test should fail loudly and be
-  // rewritten — that is what it is here for.
+  // A score is now a fraction of what was judged *and carries how much that
+  // was*. The number is still 100 because everything visible really is correct,
+  // which is the honest answer; coverage is what says not to trust it, and the
+  // UI withholds "Perfect form" on the strength of it.
   const r = score("triangle", "fault");
-  assertEqual(r.score, 100, "score");
-  assertEqual(r.scored, 7, "joints scored");
-  assertDeepEqual(r.unscored, ["left_knee"], "the faulted joint is the one dropped");
-  assertDeepEqual(r.corrections, [], "and nothing is said about it");
+  assertEqual(r.score, 100, "everything that could be seen was right");
+  assertDeepEqual(r.unscored, ["left_knee"], "and the faulted joint could not be");
+  assert(r.coverage < 0.85, `coverage ${(r.coverage * 100).toFixed(0)}% must show the gap`);
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -94,13 +101,15 @@ for (const key of POSES) {
     }
   });
 
-  test(`${key}: a half-visible body still reports 100%`, () => {
-    // Current behaviour, and wrong: unscored joints leave the denominator, so
-    // four aligned joints out of a possible eight read as a perfect pose. Only
-    // the green glow guards on hidden === 0; the headline number does not.
-    // Phase 1b changes this.
+  test(`${key}: a half-visible body reports how little it could see`, () => {
+    // The score is still 100 — the visible half really is correct, and marking
+    // it down for the size of the user's room would be its own lie. What used
+    // to be missing is any sign that half the pose was never looked at.
+    // Coverage carries that, and it is what stops the UI saying "Perfect form".
     const r = score(key, "partial");
-    assertEqual(r.score, 100);
+    assertEqual(r.score, 100, "what was judged was correct");
+    assert(r.coverage < 0.5, `coverage ${(r.coverage * 100).toFixed(0)}%`);
+    assert(r.coverage > 0, "but something was judged");
   });
 }
 
@@ -342,4 +351,140 @@ test("correctionsFor picks its phrasing from the sign of the error", () => {
   assertDeepEqual(correctionsFor({ left_knee: { ok: true, direction: -30 } }, tips), []);
   assertDeepEqual(correctionsFor({ nose: { ok: false, direction: 1 } }, tips), [],
     "a joint with no phrasing is silently skipped");
+});
+
+// ─────────────────────────────────────────────────────────────
+// Grading
+// ─────────────────────────────────────────────────────────────
+suite("graded scoring");
+
+test("a joint inside its tolerance is simply correct", () => {
+  assertEqual(jointQuality(0, 20), 1);
+  assertEqual(jointQuality(19.9, 20), 1);
+  assertEqual(jointQuality(20, 20), 1, "the boundary is inside");
+});
+
+test("quality falls off smoothly instead of over a cliff", () => {
+  const tol = 20, margin = FALLOFF_MARGIN;
+  const at = (diff) => jointQuality(diff, tol, margin);
+
+  assert(at(21) > 0.99, `one degree out is still nearly right, got ${at(21).toFixed(3)}`);
+  assertEqual(at(tol + margin), 0, "and past the margin it is worth nothing");
+  assertEqual(at(tol + margin + 50), 0, "with no negative scores");
+
+  // Monotonic, and no step anywhere along it — the property the old boolean
+  // could not have, and the reason the percentage used to move in eighths.
+  let prev = 1;
+  for (let d = tol; d <= tol + margin; d += 0.5) {
+    const q = at(d);
+    assert(q <= prev + 1e-12, `not monotonic at ${d}°`);
+    assert(prev - q < 0.05, `a step of ${(prev - q).toFixed(3)} at ${d}°`);
+    prev = q;
+  }
+});
+
+test("the falloff is flat where it meets both ends", () => {
+  // Smoothstep, not a straight line: a kink at the tolerance boundary would put
+  // the jumpiness back, one derivative further down.
+  const slope = (d) => (jointQuality(d + 0.01, 20) - jointQuality(d - 0.01, 20)) / 0.02;
+  assert(Math.abs(slope(20.5)) < 0.01, `slope at the tolerance edge: ${slope(20.5)}`);
+  assert(Math.abs(slope(44.5)) < 0.01, `slope at the far edge: ${slope(44.5)}`);
+  assert(Math.abs(slope(32.5)) > 0.04, "and it does actually fall in between");
+});
+
+test("a zero margin is the old cliff, for anyone who wants it back", () => {
+  assertEqual(jointQuality(20, 20, 0), 1);
+  assertEqual(jointQuality(20.1, 20, 0), 0);
+});
+
+test("weights decide how much a joint is the pose", () => {
+  const template = { left_knee: [175, 20], left_elbow: [175, 20] };
+  const angles = { left_knee: 175, left_elbow: 100 };   // elbow far outside its margin
+
+  const even = matchSinglePose(angles, template);
+  const knee = matchSinglePose(angles, template, { weights: { left_knee: 4, left_elbow: 1 } });
+  const elbow = matchSinglePose(angles, template, { weights: { left_knee: 1, left_elbow: 4 } });
+
+  assertEqual(even.score, 50, "unweighted, a bent elbow is half the pose");
+  assertEqual(knee.score, 80, "weighted toward the leg it barely registers");
+  assertEqual(elbow.score, 20, "weighted toward the arm it dominates");
+});
+
+test("a joint missing from the weights map still counts once", () => {
+  const template = { left_knee: [175, 20], left_elbow: [175, 20] };
+  const angles = { left_knee: 175, left_elbow: 100 };
+  assertEqual(matchSinglePose(angles, template, { weights: { left_knee: 1 } }).score, 50);
+});
+
+test("coverage is measured in weight, not in joints", () => {
+  // Losing Tree's standing leg costs far more coverage than losing a wrist,
+  // which is the whole reason coverage is weighted rather than counted.
+  const angles = Object.fromEntries(
+    Object.entries(YOGA_POSES.tree.angles).map(([j, [t]]) => [j, t]));
+  const all = new Set(Object.keys(LM));
+  const without = (name) => { const r = new Set(all); r.delete(name); return r; };
+  const opts = (reliable) => ({ reliable, weights: YOGA_POSES.tree.weights });
+
+  assertEqual(matchSinglePose(angles, YOGA_POSES.tree.angles, opts(all)).coverage, 1);
+
+  const noAnkle = matchSinglePose(angles, YOGA_POSES.tree.angles, opts(without("left_ankle")));
+  const noWrist = matchSinglePose(angles, YOGA_POSES.tree.angles, opts(without("left_wrist")));
+  assert(noAnkle.coverage < noWrist.coverage,
+    `standing leg ${noAnkle.coverage.toFixed(2)} should cost more than a wrist ${noWrist.coverage.toFixed(2)}`);
+});
+
+suite("verdict latching");
+
+const resultAt = (quality) => ({ left_knee: { quality, ok: quality >= 0.95 } });
+
+test("a joint must be clearly right to go green and clearly wrong to go red", () => {
+  const latch = new VerdictLatch();
+  assertEqual(latch.apply(resultAt(1)).left_knee.ok, true, "clearly right");
+  assertEqual(latch.apply(resultAt(0.8)).left_knee.ok, true, "drifting, but holds green");
+  assertEqual(latch.apply(resultAt(0.6)).left_knee.ok, true, "still holds");
+  assertEqual(latch.apply(resultAt(0.4)).left_knee.ok, false, "clearly wrong now");
+  assertEqual(latch.apply(resultAt(0.7)).left_knee.ok, false, "and holds red on the way back");
+  assertEqual(latch.apply(resultAt(0.99)).left_knee.ok, true, "until it is clearly right again");
+});
+
+test("a joint sitting exactly on its tolerance does not strobe", () => {
+  // The failure this exists for: quality hovering either side of the threshold
+  // at frame rate used to repaint the whole limb every frame.
+  const latch = new VerdictLatch();
+  latch.apply(resultAt(1));
+  let flips = 0, last = true;
+  for (let i = 0; i < 60; i++) {
+    const q = 0.75 + (i % 2 ? 0.08 : -0.08);   // jittering across the old boundary
+    const now = latch.apply(resultAt(q)).left_knee.ok;
+    if (now !== last) flips++;
+    last = now;
+  }
+  assertEqual(flips, 0, "sixty frames of jitter, no repaint");
+});
+
+test("the first frame falls back to the raw verdict", () => {
+  assertEqual(new VerdictLatch().apply(resultAt(0.7)).left_knee.ok, false,
+    "nothing latched yet, so believe the threshold");
+});
+
+test("a joint that drops out for a frame keeps its state", () => {
+  const latch = new VerdictLatch();
+  latch.apply(resultAt(1));
+  latch.apply({});                                   // occluded — not in results at all
+  assertEqual(latch.apply(resultAt(0.7)).left_knee.ok, true, "came back green, not red");
+});
+
+test("resetting clears every latch", () => {
+  const latch = new VerdictLatch();
+  latch.apply(resultAt(1));
+  latch.reset();
+  assertEqual(latch.apply(resultAt(0.7)).left_knee.ok, false, "a new session starts clean");
+});
+
+test("latching leaves the numbers alone", () => {
+  const out = new VerdictLatch().apply({
+    left_knee: { quality: 0.8, ok: false, diff: 24, target: 175 } });
+  assertEqual(out.left_knee.diff, 24, "still there");
+  assertEqual(out.left_knee.target, 175);
+  assertEqual(out.left_knee.quality, 0.8, "the graded value is untouched");
 });

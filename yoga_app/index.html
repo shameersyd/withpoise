@@ -626,7 +626,7 @@
 // the session state.
 import {
   LM, SKELETON, computeAngles, reliableLandmarks, matchSinglePose, correctionsFor,
-  bodyFrame, jointMeasurability, TURN_LIMIT_DEGREES,
+  bodyFrame, jointMeasurability, TURN_LIMIT_DEGREES, VerdictLatch,
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
@@ -845,15 +845,20 @@ function getScoreColor(score) {
   return RED;
 }
 
-function scoreLabelFor(score) {
-  if (score >= 100) return "Perfect form";
+/**
+ * `partial` means some of the pose was never judged, so the top verdict is
+ * withheld — telling someone their form is perfect when their legs were out of
+ * shot is the one thing the score must never do.
+ */
+function scoreLabelFor(score, partial) {
+  if (score >= 97) return partial ? "Good, as far as I can see" : "Perfect form";
   if (score >= 80) return "Great — hold it";
   if (score >= 60) return "Almost there";
   if (score >= 30) return "Keep adjusting";
   return "Find the pose";
 }
 
-function updateTrackingUI(poseName, match, detected) {
+function updateTrackingUI(poseName, match, shown, detected) {
   if (!detected || !match) {
     scoreContainer.classList.remove("visible");
     statusCard.classList.remove("visible");
@@ -863,7 +868,8 @@ function updateTrackingUI(poseName, match, detected) {
     return;
   }
 
-  const { score, results: jointResults, unscored } = match;
+  const { score, unscored } = match;
+  const jointResults = shown || match.results;
   const uncertain = match.uncertain || [];
   const turned = (match.turnDegrees || 0) > TURN_LIMIT_DEGREES;
   noPoseMsg.classList.remove("visible");
@@ -894,15 +900,19 @@ function updateTrackingUI(poseName, match, detected) {
   scoreText.style.color = color;
   scoreText.textContent = `${Math.round(score)}%`;
 
-  const aligned = Object.values(jointResults).filter(r => r.ok).length;
+  const aligned = match.aligned ?? Object.values(jointResults).filter(r => r.ok).length;
   const total = Object.keys(jointResults).length;
   const hidden = unscored ? unscored.length : 0;
   const unsure = uncertain.length;
+  // A score is a fraction of what could be judged. Below full coverage it is
+  // still worth showing — it is the only feedback available — but it must not
+  // read as a verdict on the whole pose.
+  const partial = (match.coverage ?? 1) < 0.999;
   statusCard.classList.add("visible");
   poseBadge.textContent = score >= 80 ? `✅ ${poseName}` : `🧘 ${poseName}`;
   scoreValue.textContent = `${Math.round(score)}%`;
   scoreValue.style.color = color;
-  scoreLabel.textContent = scoreLabelFor(score);
+  scoreLabel.textContent = partial ? scoreLabelFor(score, true) : scoreLabelFor(score);
   scoreLabel.style.color = color;
   // Hidden and can't-tell are different problems with different remedies, so
   // they get different words. Turning is the more actionable of the two, so it
@@ -914,7 +924,7 @@ function updateTrackingUI(poseName, match, detected) {
     ? `${aligned} of ${total} judged — turn to face the camera`
     : [`${aligned} of ${total} joints aligned`, ...asides].join(" · ");
 
-  perfectGlow.classList.toggle("visible", score >= 95 && hidden === 0 && unsure === 0);
+  perfectGlow.classList.toggle("visible", score >= 97 && !partial);
 
   const corrections = correctionsFor(jointResults, CORRECTION_TIPS);
 
@@ -1204,6 +1214,10 @@ function setModel(model) {
   startWorker(model);
 }
 
+// Latched per-joint verdicts for the outline. Cleared whenever a session
+// restarts so a new pose never inherits the last one's colours.
+const verdicts = new VerdictLatch();
+
 // loading → framing → countdown → live
 let trackPhase = "framing";
 let countdownStart = 0;
@@ -1258,10 +1272,11 @@ function resetTrackPhase() {
   readySince = 0;
   latestResult = null;
   resetBodyLengths();
+  verdicts.reset();
   if (poseWorker && workerReady) poseWorker.postMessage({ type: "reset" });
   overlayState = "";
   trackOverlay.classList.remove("hidden", "fading");
-  updateTrackingUI("", 0, {}, false);
+  updateTrackingUI("", null, null, false);
   noPoseMsg.classList.remove("visible");
 }
 
@@ -1506,8 +1521,15 @@ function startTrackingLoop() {
       const frame = world ? bodyFrame(world) : null;
       const measurability = world ? jointMeasurability(world) : null;
 
-      const match = matchSinglePose(angles, pose.angles, { reliable, measurability });
+      const match = matchSinglePose(angles, pose.angles,
+        { reliable, measurability, weights: pose.weights });
       match.turnDegrees = frame ? frame.turnDegrees : 0;
+
+      // Colours and corrections run off the latched verdicts, not the raw
+      // threshold, so a joint resting on its tolerance holds its colour instead
+      // of strobing. The score underneath stays graded and continuous.
+      const shown = verdicts.apply(match.results);
+      match.aligned = Object.values(shown).filter(r => r.ok).length;
 
       // A joint we cannot measure is drawn like one we cannot see: greyed and
       // dashed, never red. Being told to fix a joint the camera can't judge is
@@ -1517,13 +1539,13 @@ function startTrackingLoop() {
 
       const target = buildTargetFigure(selectedPoseKey, landmarks, w, h);
       if (ghostOn) {
-        drawGhost(ctx, selectedPoseKey, w, h, landmarks, match.results, target, judged);
+        drawGhost(ctx, selectedPoseKey, w, h, landmarks, shown, target, judged);
       }
-      drawSkeleton(ctx, landmarks, w, h, match.results, target, judged);
-      updateTrackingUI(pose.name, match, true);
+      drawSkeleton(ctx, landmarks, w, h, shown, target, judged);
+      updateTrackingUI(pose.name, match, shown, true);
     } else {
       if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
-      updateTrackingUI("", null, false);
+      updateTrackingUI("", null, null, false);
     }
   }
 
