@@ -1,11 +1,26 @@
-const CACHE_NAME = "yoga-pose-v3";
-const RUNTIME_CACHE = "yoga-pose-runtime-v3";
+// Bump when the app shell changes. Network-first means a stale shell is rarely
+// what you get anyway; this decides what a *first offline visit* after a deploy
+// finds waiting for it.
+const APP_CACHE = "yoga-pose-app-v4";
+
+// Versioned separately, and deliberately not tied to the app version. This
+// holds the MediaPipe runtime and a 9-30 MB model file, both immutable and both
+// versioned in their own URLs. Tying it to the app version would mean every
+// deploy re-downloading thirty megabytes onto someone's phone. Bump it only if
+// those URLs change shape.
+const RUNTIME_CACHE = "yoga-pose-runtime-v1";
+
+// Relative, not host-absolute. "/index.html" is only correct when the app is
+// deployed at a domain root; under any subpath — a project page, a preview
+// deploy, anything shared from a folder — precaching failed outright and took
+// the whole install with it. These resolve against the worker's own scope.
+//
 // Precached so a first visit that goes offline mid-load still has a whole app.
-// After that the network-first rule keeps them fresh. tests/ asserts this list
-// covers everything index.html imports — it has silently fallen behind twice.
-const ASSETS = ["/", "/index.html", "/manifest.json",
-                "/pose-core.js", "/poses.js", "/pose-worker.js",
-                "/coach.js", "/voice.js", "/pacing.js"];
+// A test asserts this list covers everything the app imports; it had silently
+// fallen behind twice before that existed.
+const ASSETS = ["./", "./index.html", "./manifest.json",
+                "./pose-core.js", "./poses.js", "./pose-worker.js",
+                "./coach.js", "./voice.js", "./pacing.js"];
 
 // The MediaPipe runtime and the model files are large, immutable and versioned
 // in their URLs — worth keeping once fetched, so a second visit starts offline
@@ -13,7 +28,7 @@ const ASSETS = ["/", "/index.html", "/manifest.json",
 const RUNTIME_HOSTS = ["cdn.jsdelivr.net", "storage.googleapis.com"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(ASSETS)));
+  e.waitUntil(caches.open(APP_CACHE).then((c) => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
@@ -22,7 +37,7 @@ self.addEventListener("activate", (e) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k !== CACHE_NAME && k !== RUNTIME_CACHE)
+          .filter((k) => k !== APP_CACHE && k !== RUNTIME_CACHE)
           .map((k) => caches.delete(k))
       )
     )
@@ -35,11 +50,11 @@ async function networkFirst(request) {
   try {
     const response = await fetch(request);
     const copy = response.clone();
-    caches.open(CACHE_NAME).then((c) => c.put(request, copy));
+    caches.open(APP_CACHE).then((c) => c.put(request, copy));
     return response;
   } catch (err) {
     const cached = await caches.match(request);
-    return cached || caches.match("/index.html");
+    return cached || caches.match("./index.html");
   }
 }
 
@@ -76,5 +91,5 @@ self.addEventListener("fetch", (e) => {
     e.request.destination === "script" ||
     e.request.destination === "worker";
 
-  e.respondWith(isAppCode ? networkFirst(e.request) : cacheFirst(e.request, CACHE_NAME));
+  e.respondWith(isAppCode ? networkFirst(e.request) : cacheFirst(e.request, APP_CACHE));
 });

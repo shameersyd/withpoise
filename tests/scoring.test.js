@@ -671,13 +671,40 @@ test("the service worker precaches every module the app imports", () => {
 
   const assets = sw.slice(sw.indexOf("const ASSETS"), sw.indexOf("];", sw.indexOf("const ASSETS")));
   for (const file of imported) {
-    assert(assets.includes(`/${file}`), `sw.js does not precache ${file}`);
+    assert(assets.includes(file), `sw.js does not precache ${file}`);
   }
 
   // The worker's own imports ride along on the same list.
   const workerImports = [...readFile("yoga_app/pose-worker.js")
     .matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(m => m[1]);
   for (const file of workerImports) {
-    assert(assets.includes(`/${file}`), `sw.js does not precache ${file}, needed by the worker`);
+    assert(assets.includes(file), `sw.js does not precache ${file}, needed by the worker`);
   }
+});
+
+test("the service worker's asset paths are relative to its own scope", () => {
+  // "/index.html" is only correct at a domain root. Under a subpath — a project
+  // page, a preview deploy, a shared folder — addAll rejects and takes the
+  // whole install down with it, so the app never caches anything at all.
+  const sw = readFile("yoga_app/sw.js");
+  const list = sw.slice(sw.indexOf("const ASSETS"), sw.indexOf("];", sw.indexOf("const ASSETS")));
+  const paths = [...list.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+  assert(paths.length > 3, `expected an asset list, found ${paths.length} entries`);
+  for (const path of paths) {
+    assert(!path.startsWith("/"), `${path} is host-absolute`);
+  }
+  assert(!/caches\.match\("\//.test(sw), "the navigation fallback is host-absolute too");
+});
+
+test("the runtime cache is versioned apart from the app shell", () => {
+  // They must not share a version. The runtime cache holds a 9-30 MB model, and
+  // tying it to the app version would re-download that on every deploy.
+  const sw = readFile("yoga_app/sw.js");
+  const app = sw.match(/APP_CACHE\s*=\s*"([^"]+)"/);
+  const runtime = sw.match(/RUNTIME_CACHE\s*=\s*"([^"]+)"/);
+  assert(app && runtime, "both caches must be named");
+  const version = (name) => name.slice(name.lastIndexOf("-v"));
+  assert(app[1] !== runtime[1], "the two caches must have different names");
+  assert(version(app[1]) !== version(runtime[1]),
+    `both caches are at ${version(app[1])}, so bumping the app evicts the model`);
 });
