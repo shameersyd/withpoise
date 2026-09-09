@@ -773,3 +773,86 @@ export class VerdictLatch {
     return out;
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Frame processing
+// ─────────────────────────────────────────────────────────────
+/**
+ * One detection, start to finish, with the MediaPipe landmarker injected.
+ *
+ * Lives here rather than in the worker so its central promise can be tested:
+ * **every call posts exactly one result**. The main thread sends one frame at a
+ * time and waits for the reply, so a path that returns without replying wedges
+ * the app permanently — no further frame is sent, and the render loop paints
+ * the last result it has forever. A frozen skeleton, scored as live, with no
+ * error raised anywhere. Two such paths existed.
+ */
+export class FrameProcessor {
+  constructor(tuning = TUNING) {
+    this.tuning = tuning;
+    this.reset();
+  }
+
+  reset() {
+    this.imageFilters = makeFilters(this.tuning.image);
+    this.worldFilters = makeFilters(this.tuning.world);
+    this.lastTimestamp = 0;
+  }
+
+  /**
+   * deps: { landmarker, post, now }
+   *   landmarker  anything with detectForVideo(bitmap, ts); may be null or throw
+   *   post        receives exactly one { type: "result", ... }, plus a
+   *               { type: "status", state: "error" } first if detection threw
+   *   now         monotonic milliseconds, injected so tests can control it
+   */
+  process({ bitmap, timestamp }, { landmarker, post, now }) {
+    // detectForVideo demands strictly increasing timestamps.
+    const ts = timestamp > this.lastTimestamp ? timestamp : this.lastTimestamp + 1;
+    this.lastTimestamp = ts;
+
+    const close = () => { try { bitmap && bitmap.close && bitmap.close(); } catch { /* ignore */ } };
+
+    if (!landmarker) {
+      close();
+      post({ type: "result", timestamp: ts, detected: false, inference: 0 });
+      return;
+    }
+
+    const startedAt = now();
+    let result = null;
+    try {
+      result = landmarker.detectForVideo(bitmap, ts);
+    } catch (err) {
+      post({ type: "status", state: "error",
+             message: err && err.message ? err.message : String(err) });
+      post({ type: "result", timestamp: ts, detected: false, inference: 0 });
+      return;
+    } finally {
+      close();
+    }
+
+    const inference = now() - startedAt;
+    const tSeconds = ts / 1000;
+
+    if (!(result && result.landmarks && result.landmarks.length)) {
+      post({ type: "result", timestamp: ts, detected: false, inference });
+      return;
+    }
+
+    const image = result.landmarks[0];
+    const visibilities = image.map(p => p.visibility ?? 1);
+    const world = (result.worldLandmarks && result.worldLandmarks[0]) || null;
+
+    post({
+      type: "result",
+      timestamp: ts,
+      detected: true,
+      inference,
+      landmarks: smooth(image, this.imageFilters, tSeconds, visibilities),
+      // World landmarks are metric and origin-centred on the hips — the right
+      // input for view-independent joint angles.
+      world: world ? smooth(world, this.worldFilters, tSeconds, visibilities) : null,
+    });
+  }
+}

@@ -1,5 +1,6 @@
 import { suite, test, assert, assertEqual, assertClose } from "./harness.js";
-import { OneEuroFilter, TUNING, makeFilters, smooth, VIS_THRESHOLD } from "../yoga_app/pose-core.js";
+import { OneEuroFilter, TUNING, makeFilters, smooth, VIS_THRESHOLD,
+         FrameProcessor } from "../yoga_app/pose-core.js";
 
 suite("temporal smoothing");
 
@@ -125,4 +126,126 @@ test("explicit visibilities override the ones on the points", () => {
   const pts = frameOf(0.3, 1);
   const out = smooth(pts, filters, 0, pts.map(() => 0.1));
   assertEqual(out[0].held, true, "the passed-in visibility wins");
+});
+
+// ─────────────────────────────────────────────────────────────
+// Frame processing
+// ─────────────────────────────────────────────────────────────
+suite("frame processing");
+
+const posed = () => ({
+  landmarks: [Array.from({ length: 33 }, () => ({ x: 0.4, y: 0.6, z: 0.1, visibility: 1 }))],
+  worldLandmarks: [Array.from({ length: 33 }, () => ({ x: 0.1, y: -0.2, z: 0.05 }))],
+});
+
+/** A bitmap that records whether anyone closed it. */
+const fakeBitmap = () => ({ closed: false, close() { this.closed = true; } });
+
+function drive(landmarker, { timestamp = 1000, processor, bitmap } = {}) {
+  const posts = [];
+  let clock = 0;
+  const bmp = bitmap === undefined ? fakeBitmap() : bitmap;
+  (processor || new FrameProcessor()).process(
+    { bitmap: bmp, timestamp },
+    { landmarker, post: (m) => posts.push(m), now: () => (clock += 5) });
+  return { posts, bitmap: bmp, results: posts.filter(m => m.type === "result") };
+}
+
+test("a frame always gets exactly one result back", () => {
+  // The invariant the whole pump rests on. The main thread sends one frame and
+  // waits; a path that stays silent wedges the app with no error anywhere, and
+  // two such paths existed.
+  const cases = {
+    "no landmarker yet": null,
+    "detection threw": { detectForVideo() { throw new Error("wasm exploded"); } },
+    "nobody in shot": { detectForVideo: () => ({ landmarks: [] }) },
+    "a null result": { detectForVideo: () => null },
+    "no world landmarks": { detectForVideo: () => ({ landmarks: posed().landmarks }) },
+    "a pose": { detectForVideo: () => posed() },
+  };
+  for (const [name, landmarker] of Object.entries(cases)) {
+    const { results } = drive(landmarker);
+    assertEqual(results.length, 1, `${name}: expected one result`);
+    assertEqual(typeof results[0].timestamp, "number", `${name}: carries a timestamp`);
+  }
+});
+
+test("the bitmap is released on every path, including the failing ones", () => {
+  // ImageBitmaps hold real memory. Leaking one per frame at 30Hz is a phone
+  // running out of memory in under a minute.
+  for (const landmarker of [
+    null,
+    { detectForVideo() { throw new Error("boom"); } },
+    { detectForVideo: () => ({ landmarks: [] }) },
+    { detectForVideo: () => posed() },
+  ]) {
+    assert(drive(landmarker).bitmap.closed, "bitmap left open");
+  }
+});
+
+test("a detection that throws reports the error as well as replying", () => {
+  const { posts } = drive({ detectForVideo() { throw new Error("wasm exploded"); } });
+  assertEqual(posts.length, 2);
+  assertEqual(posts[0].type, "status");
+  assertEqual(posts[0].state, "error");
+  assertEqual(posts[0].message, "wasm exploded");
+  assertEqual(posts[1].type, "result");
+  assertEqual(posts[1].detected, false, "and does not claim to have seen anything");
+});
+
+test("timestamps handed to MediaPipe strictly increase", () => {
+  // detectForVideo rejects a timestamp that does not advance, and performance
+  // .now() can repeat within a millisecond on a fast machine.
+  const seen = [];
+  const landmarker = { detectForVideo: (_b, ts) => { seen.push(ts); return posed(); } };
+  const processor = new FrameProcessor();
+  for (const t of [100, 100, 100, 99, 500]) drive(landmarker, { timestamp: t, processor });
+  for (let i = 1; i < seen.length; i++) {
+    assert(seen[i] > seen[i - 1], `${seen[i]} did not advance past ${seen[i - 1]}`);
+  }
+});
+
+test("a detected pose comes back smoothed, in both coordinate spaces", () => {
+  const { results } = drive({ detectForVideo: () => posed() });
+  const r = results[0];
+  assertEqual(r.detected, true);
+  assertEqual(r.landmarks.length, 33, "image landmarks");
+  assertEqual(r.world.length, 33, "world landmarks");
+  assertEqual(r.landmarks[0].held, false);
+  assertClose(r.landmarks[0].x, 0.4, 1e-9, "first frame passes straight through");
+  assertClose(r.world[0].y, -0.2, 1e-9);
+});
+
+test("a pose with no world landmarks still reports the image ones", () => {
+  const { results } = drive({ detectForVideo: () => ({ landmarks: posed().landmarks }) });
+  assertEqual(results[0].detected, true);
+  assertEqual(results[0].world, null, "and says plainly that it has none");
+});
+
+test("inference time is measured, not guessed", () => {
+  const { results } = drive({ detectForVideo: () => posed() });
+  assertEqual(results[0].inference, 5, "one tick of the injected clock");
+});
+
+test("resetting forgets the last body", () => {
+  // Between poses, or after a model swap, the filters must not blend the new
+  // body into the old one's smoothed history.
+  const processor = new FrameProcessor();
+  const still = { detectForVideo: () => posed() };
+  for (let i = 0; i < 40; i++) drive(still, { timestamp: 100 + i * 33, processor });
+
+  const moved = {
+    detectForVideo: () => ({
+      landmarks: [Array.from({ length: 33 }, () => ({ x: 0.9, y: 0.6, z: 0, visibility: 1 }))],
+    }),
+  };
+  // Next frame in sequence: a big gap would mean a big dt, and One Euro is
+  // meant to barely smooth at all across one of those.
+  const blended = drive(moved, { timestamp: 100 + 40 * 33, processor }).results[0];
+  assert(blended.landmarks[0].x < 0.6,
+    `without a reset it blends, as it should — got ${blended.landmarks[0].x}`);
+
+  processor.reset();
+  const afterReset = drive(moved, { timestamp: 100 + 41 * 33, processor }).results[0];
+  assertClose(afterReset.landmarks[0].x, 0.9, 1e-9, "after a reset it does not");
 });

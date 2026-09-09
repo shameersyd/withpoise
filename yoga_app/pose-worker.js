@@ -20,9 +20,10 @@ import {
   FilesetResolver,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
 
-// The filter math and the visibility threshold are shared with the main thread,
-// so `held` here and `reliable` there can never mean two different things.
-import { TUNING, makeFilters, smooth } from "./pose-core.js";
+// The frame logic, the filter math and the visibility threshold all live in
+// pose-core.js: shared with the main thread so `held` here and `reliable` there
+// can never mean two different things, and testable, which a worker is not.
+import { FrameProcessor } from "./pose-core.js";
 
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
 
@@ -31,21 +32,13 @@ const MODELS = {
   heavy: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
 };
 
-
-let imageFilters = makeFilters(TUNING.image);
-let worldFilters = makeFilters(TUNING.world);
-
-function resetFilters() {
-  imageFilters = makeFilters(TUNING.image);
-  worldFilters = makeFilters(TUNING.world);
-}
+const frames = new FrameProcessor();
 
 // ─────────────────────────────────────────────────────────────
 // Landmarker lifecycle
 // ─────────────────────────────────────────────────────────────
 let landmarker = null;
 let currentModel = null;
-let lastTimestamp = 0;
 
 async function createLandmarker(vision, model, delegate) {
   return PoseLandmarker.createFromOptions(vision, {
@@ -74,8 +67,7 @@ async function init(model) {
     }
 
     currentModel = which;
-    lastTimestamp = 0;
-    resetFilters();
+    frames.reset();
     postMessage({ type: "status", state: "ready", model: which });
   } catch (err) {
     postMessage({ type: "status", state: "error", model: which,
@@ -83,50 +75,14 @@ async function init(model) {
   }
 }
 
-function handleFrame({ bitmap, timestamp }) {
-  if (!landmarker) {
-    bitmap.close();
-    return;
-  }
-
-  // detectForVideo demands strictly increasing timestamps.
-  const ts = timestamp > lastTimestamp ? timestamp : lastTimestamp + 1;
-  lastTimestamp = ts;
-
-  const startedAt = performance.now();
-  let result = null;
-  try {
-    result = landmarker.detectForVideo(bitmap, ts);
-  } catch (err) {
-    postMessage({ type: "status", state: "error", model: currentModel,
-                  message: err && err.message ? err.message : String(err) });
-    return;
-  } finally {
-    bitmap.close();
-  }
-
-  const inference = performance.now() - startedAt;
-  const tSeconds = ts / 1000;
-  const hasPose = !!(result && result.landmarks && result.landmarks.length);
-
-  if (!hasPose) {
-    postMessage({ type: "result", timestamp: ts, detected: false, inference });
-    return;
-  }
-
-  const image = result.landmarks[0];
-  const visibilities = image.map(p => p.visibility ?? 1);
-  const world = (result.worldLandmarks && result.worldLandmarks[0]) || null;
-
-  postMessage({
-    type: "result",
-    timestamp: ts,
-    detected: true,
-    inference,
-    landmarks: smooth(image, imageFilters, tSeconds, visibilities),
-    // World landmarks are metric and origin-centred on the hips — the right
-    // input for view-independent joint angles.
-    world: world ? smooth(world, worldFilters, tSeconds, visibilities) : null,
+// Exactly one `result` goes back for every frame that comes in, on every path
+// including failure — the main thread waits for it before sending another.
+// FrameProcessor is where that promise is kept, and tested.
+function handleFrame(msg) {
+  frames.process(msg, {
+    landmarker,
+    post: (out) => postMessage(out.type === "status" ? { ...out, model: currentModel } : out),
+    now: () => performance.now(),
   });
 }
 
@@ -140,7 +96,7 @@ self.onmessage = (e) => {
       handleFrame(msg);
       break;
     case "reset":
-      resetFilters();
+      frames.reset();
       break;
   }
 };

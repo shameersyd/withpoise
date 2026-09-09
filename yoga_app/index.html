@@ -1344,7 +1344,20 @@ document.getElementById("btn-back-select").addEventListener("click", () => {
 let poseWorker = null;
 let workerReady = false;
 let frameInFlight = false;
+let frameSentAt = 0;
+let stalls = 0;
 let latestResult = null;
+
+// A frame that has not come back in this long is not coming back. The worker
+// now replies on every path, so this should never fire — but "should never
+// fire" is exactly what was believed about the paths that wedged the app, and
+// a watchdog costs one comparison per frame.
+const FRAME_TIMEOUT_MS = 4000;
+
+// And a result older than this is not worth painting. Detection runs at 10-30Hz,
+// so a second of silence is a dozen missed frames: something is wrong, and a
+// stale skeleton is worse than none.
+const RESULT_STALE_MS = 1200;
 let currentModel = "full";
 let modelStatus = { state: "loading", message: "Starting…" };
 
@@ -1355,6 +1368,8 @@ function startWorker(model) {
 
   workerReady = false;
   frameInFlight = false;
+  frameSentAt = 0;
+  stalls = 0;
   latestResult = null;
   currentModel = model;
   modelStatus = { state: "loading", message: "Starting…" };
@@ -1381,8 +1396,10 @@ function startWorker(model) {
       }
       renderModelToggles();
     } else if (msg.type === "result") {
+      msg.at = performance.now();
       latestResult = msg;
       frameInFlight = false;
+      stalls = 0;
     }
   };
 
@@ -1396,9 +1413,20 @@ function startWorker(model) {
 }
 
 /** Hand the worker one video frame, if it isn't still chewing on the last. */
-function sendFrameToWorker() {
+function sendFrameToWorker(now) {
+  if (frameInFlight && now - frameSentAt > FRAME_TIMEOUT_MS) {
+    // Give up on it and start again rather than waiting forever.
+    frameInFlight = false;
+    stalls++;
+    if (stalls >= 2 && modelStatus.state !== "error") {
+      modelStatus = { state: "error", message: "Pose detection stopped responding." };
+      renderModelToggles();
+    }
+  }
   if (!workerReady || frameInFlight || video.readyState < 2) return;
+
   frameInFlight = true;
+  frameSentAt = now;
   createImageBitmap(video)
     .then(bitmap => {
       poseWorker.postMessage(
@@ -1709,12 +1737,15 @@ function startTrackingLoop() {
       canvas.height = video.videoHeight;
     }
 
-    sendFrameToWorker();
+    sendFrameToWorker(timestamp);
 
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const landmarks = latestResult && latestResult.detected ? latestResult.landmarks : null;
+    // Anything this old is not evidence about where the body is now.
+    const fresh = latestResult &&
+      performance.now() - latestResult.at < RESULT_STALE_MS;
+    const landmarks = fresh && latestResult.detected ? latestResult.landmarks : null;
     const world = landmarks ? latestResult.world : null;
     const pose = YOGA_POSES[selectedPoseKey];
     const reliable = landmarks ? reliableLandmarks(landmarks) : null;
