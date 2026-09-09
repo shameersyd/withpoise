@@ -20,6 +20,10 @@ import {
   FilesetResolver,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
 
+// The filter math and the visibility threshold are shared with the main thread,
+// so `held` here and `reliable` there can never mean two different things.
+import { TUNING, makeFilters, smooth } from "./pose-core.js";
+
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm";
 
 const MODELS = {
@@ -27,85 +31,6 @@ const MODELS = {
   heavy: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
 };
 
-// Below this visibility a landmark is a guess, not a measurement.
-const VIS_THRESHOLD = 0.5;
-
-// One Euro tuning. minCutoff sets the floor of smoothing when still (lower =
-// steadier but laggier); beta relaxes it as the joint speeds up (higher = less
-// lag when moving). Image landmarks are in 0..1, world landmarks in metres, so
-// they get separate constants.
-const TUNING = {
-  image: { minCutoff: 1.1, beta: 0.35, dCutoff: 1.0 },
-  world: { minCutoff: 1.1, beta: 0.30, dCutoff: 1.0 },
-};
-
-const NUM_LANDMARKS = 33;
-
-// ─────────────────────────────────────────────────────────────
-// One Euro Filter
-// ─────────────────────────────────────────────────────────────
-class LowPass {
-  constructor() { this.y = null; }
-  filter(x, alpha) {
-    this.y = this.y === null ? x : alpha * x + (1 - alpha) * this.y;
-    return this.y;
-  }
-  get value() { return this.y; }
-}
-
-class OneEuroFilter {
-  constructor({ minCutoff, beta, dCutoff }) {
-    this.minCutoff = minCutoff;
-    this.beta = beta;
-    this.dCutoff = dCutoff;
-    this.x = new LowPass();
-    this.dx = new LowPass();
-    this.tPrev = null;
-    this.xPrev = null;
-  }
-
-  static alpha(cutoff, dt) {
-    const tau = 1 / (2 * Math.PI * cutoff);
-    return 1 / (1 + tau / dt);
-  }
-
-  /** Feed a trusted measurement. Returns the smoothed value. */
-  filter(value, tSeconds) {
-    if (this.tPrev === null) {
-      this.tPrev = tSeconds;
-      this.xPrev = value;
-      return this.x.filter(value, 1);
-    }
-    const dt = Math.min(0.5, Math.max(1 / 240, tSeconds - this.tPrev));
-    this.tPrev = tSeconds;
-
-    const dValue = (value - this.xPrev) / dt;
-    this.xPrev = value;
-    const dHat = this.dx.filter(dValue, OneEuroFilter.alpha(this.dCutoff, dt));
-
-    const cutoff = this.minCutoff + this.beta * Math.abs(dHat);
-    return this.x.filter(value, OneEuroFilter.alpha(cutoff, dt));
-  }
-
-  /**
-   * No trustworthy measurement this frame: hold the smoothed history rather
-   * than tracking a guessed landmark. Returns null if nothing has been seen yet.
-   */
-  hold(tSeconds) {
-    if (this.x.value === null) return null;
-    this.tPrev = tSeconds;   // so the next real sample sees a sane dt
-    return this.x.value;
-  }
-}
-
-/** A filter triple per landmark, for one coordinate space. */
-function makeFilters(tuning) {
-  return Array.from({ length: NUM_LANDMARKS }, () => ({
-    x: new OneEuroFilter(tuning),
-    y: new OneEuroFilter(tuning),
-    z: new OneEuroFilter(tuning),
-  }));
-}
 
 let imageFilters = makeFilters(TUNING.image);
 let worldFilters = makeFilters(TUNING.world);
@@ -113,41 +38,6 @@ let worldFilters = makeFilters(TUNING.world);
 function resetFilters() {
   imageFilters = makeFilters(TUNING.image);
   worldFilters = makeFilters(TUNING.world);
-}
-
-/**
- * Smooth one landmark array. Landmarks below the visibility threshold keep
- * their last smoothed position and come back flagged `held`.
- */
-function smooth(points, filters, tSeconds, visibilities) {
-  const out = [];
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const f = filters[i];
-    const visibility = visibilities ? visibilities[i] : (p.visibility ?? 1);
-    const trusted = visibility >= VIS_THRESHOLD;
-
-    if (trusted) {
-      out.push({
-        x: f.x.filter(p.x, tSeconds),
-        y: f.y.filter(p.y, tSeconds),
-        z: f.z.filter(p.z ?? 0, tSeconds),
-        visibility,
-        held: false,
-      });
-    } else {
-      const hx = f.x.hold(tSeconds), hy = f.y.hold(tSeconds), hz = f.z.hold(tSeconds);
-      const seen = hx !== null;
-      out.push({
-        x: seen ? hx : p.x,
-        y: seen ? hy : p.y,
-        z: seen ? hz : (p.z ?? 0),
-        visibility,
-        held: true,
-      });
-    }
-  }
-  return out;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -254,6 +144,3 @@ self.onmessage = (e) => {
       break;
   }
 };
-
-// Exported for tests running outside a worker context.
-export { OneEuroFilter, smooth, resetFilters, VIS_THRESHOLD, TUNING };
