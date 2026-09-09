@@ -4,7 +4,10 @@
   "generated": "synthetic — tests/make-fixtures.js; see the header there",
   "variants": {
     "correct": {
-      "note": "The rig held exactly. Every joint should sit on its target.",
+      "note": "The rig held exactly, in the view this pose needs. 0° from the camera, depth compressed to 1.00×.",
+      "offIdeal": 0,
+      "turnFromCamera": 0,
+      "depthCompression": 1,
       "image": [
         {
           "x": 0.5,
@@ -814,8 +817,9 @@
       ]
     },
     "turned": {
-      "note": "Correct, and standing 30° off-axis — the angle the brief says must score the same as head-on. Depth compressed to 0.70×.",
-      "turnedDegrees": 30,
+      "note": "Correct, standing 30° off the view this pose needs — which must score the same as standing in it. 30° from the camera, depth compressed to 0.70×.",
+      "offIdeal": 30,
+      "turnFromCamera": 30,
       "depthCompression": 0.6954,
       "image": [
         {
@@ -1219,8 +1223,9 @@
       ]
     },
     "edgeOn": {
-      "note": "Correct, but turned 80° off-axis — a model of what a monocular landmarker loses on a body nearly edge-on to the camera. Depth compressed to 0.40×.",
-      "turnedDegrees": 80,
+      "note": "Correct, but standing 80° off the view this pose needs — about as badly as it can be seen. 80° from the camera, depth compressed to 0.40×.",
+      "offIdeal": 80,
+      "turnFromCamera": 80,
       "depthCompression": 0.4,
       "image": [
         {

@@ -1,5 +1,5 @@
 import { suite, test, assert, assertEqual, assertClose, assertDeepEqual } from "./harness.js";
-import { HoldTimer, Session, Coach, rankCorrections, SPEECH, FRAMING_GRACE_MS, LOST_MESSAGES } from "../yoga_app/coach.js";
+import { HoldTimer, Session, Coach, rankCorrections, SPEECH, FRAMING_GRACE_MS, LOST_MESSAGES, turnAdvice } from "../yoga_app/coach.js";
 
 suite("hold timer");
 
@@ -402,12 +402,33 @@ test("being lost is said at once, then rarely", () => {
 
 test("each way of being lost is named by what to do about it", () => {
   for (const [reason, expected] of Object.entries(LOST_MESSAGES)) {
-    const coach = new Coach();
-    assertEqual(coach.update({ phase: "lost", reason }, 0).text, expected);
+    assertEqual(new Coach().update({ phase: "lost", reason }, 0).text, expected);
   }
-  const coach = new Coach();
-  assertEqual(coach.update({ phase: "lost", reason: "something new" }, 0).text,
+  assertEqual(new Coach().update({ phase: "lost", reason: "something new" }, 0).text,
     LOST_MESSAGES.gone, "an unknown reason still says something useful");
+});
+
+test("which way to turn depends on the pose, not on being lost", () => {
+  // Most poses are held facing the camera and go wrong by turning away. A pose
+  // that lives in the sagittal plane is the exact reverse, and telling someone
+  // in Downward Dog to face the camera would be telling them to ruin it.
+  assertEqual(turnAdvice("front"), "Turn to face the camera.");
+  assertEqual(turnAdvice("side"), "Turn side-on to the camera.");
+  assertEqual(turnAdvice(undefined), "Turn to face the camera.", "front by default");
+
+  for (const view of ["front", "side"]) {
+    assertEqual(new Coach().update({ phase: "lost", reason: "framing", view }, 0).text,
+      turnAdvice(view), `lost, ${view}`);
+    assertEqual(new Coach().update(liveState({ needsTurn: true, view }), 0).text,
+      turnAdvice(view), `mid-pose, ${view}`);
+  }
+});
+
+test("a side-on pose says so while you are still getting into frame", () => {
+  const coach = new Coach();
+  coach.update({ phase: "framing", detected: true, view: "side" }, 0);
+  assertEqual(coach.update({ phase: "framing", detected: true, view: "side" },
+    FRAMING_GRACE_MS + 1).text, "Stand side-on to the camera for this one.");
 });
 
 test("coming back does not re-announce a pose already underway", () => {

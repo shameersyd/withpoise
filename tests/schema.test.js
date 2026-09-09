@@ -30,7 +30,7 @@ test("the targets are the rig, not a second opinion about it", () => {
   for (const [key, pose] of Object.entries(POSE_DATA)) {
     const compiled = compilePose(key, pose);
     const straightFromTheRig = computeAngles(
-      figureLandmarks(buildReference(pose.rig)), null, 1, 1);
+      figureLandmarks(buildReference(pose.rig, null, pose.view)), null, 1, 1);
     for (const joint of JOINT_NAMES) {
       assertClose(compiled.angles[joint][0], straightFromTheRig[joint], 1e-9, `${key} ${joint}`);
     }

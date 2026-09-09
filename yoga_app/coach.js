@@ -177,11 +177,25 @@ export const FRAMING_GRACE_MS = 2500;
 // Said when tracking has already started and the body is then lost. Each names
 // the thing to do, not the thing that happened: "step back in" is actionable,
 // "tracking paused" is not.
+// Lost for a reason that means the same thing whichever way the pose is held.
+// The third reason, "framing", is a turn, and which turn depends on the pose —
+// see turnAdvice.
 export const LOST_MESSAGES = {
   gone: "I've lost you. Step back in front of the camera.",
-  framing: "Turn so I can see your shoulders and hips.",
   coverage: "Step back — I can only see part of you.",
 };
+
+/**
+ * Which way to turn, which is not the same question for every pose.
+ *
+ * Most poses are held facing the camera and go wrong by turning away from it.
+ * A pose whose shape lives in the sagittal plane — Downward Dog — is the exact
+ * reverse: facing the camera is what makes it unreadable.
+ */
+export const turnAdvice = (view) =>
+  view === "side"
+    ? "Turn side-on to the camera."
+    : "Turn to face the camera.";
 
 export const SPEECH = {
   minGapMs: 4500,        // never two corrections closer than this
@@ -255,8 +269,10 @@ export class Coach {
       if (now - this.lastFramingAt < this.cfg.framingGapMs) return null;
       this.lastFramingAt = now;
       this.wasCorrect = false;
-      return this.say("lost", LOST_MESSAGES[state.reason] || LOST_MESSAGES.gone,
-        now, { interrupt: true });
+      const message = state.reason === "framing"
+        ? turnAdvice(state.view)
+        : LOST_MESSAGES[state.reason] || LOST_MESSAGES.gone;
+      return this.say("lost", message, now, { interrupt: true });
     }
 
     // ── getting into shot ──
@@ -271,9 +287,11 @@ export class Coach {
       if (now - this.framingSince < FRAMING_GRACE_MS) return null;
       if (now - this.lastFramingAt < this.cfg.framingGapMs) return null;
       this.lastFramingAt = now;
-      return this.say("framing", state.detected
-        ? "Turn so I can see your shoulders and hips."
-        : "Step into the frame.", now, { interrupt: true });
+      return this.say("framing", !state.detected
+        ? "Step into the frame."
+        : state.view === "side"
+          ? "Stand side-on to the camera for this one."
+          : "Turn so I can see your shoulders and hips.", now, { interrupt: true });
     }
 
     // ── the count-in ──
@@ -334,7 +352,7 @@ export class Coach {
       if (now - this.lastFramingAt < this.cfg.framingGapMs) return null;
       this.lastFramingAt = now;
       return this.say("framing", state.needsTurn
-        ? "Turn to face the camera."
+        ? turnAdvice(state.view)
         : "Step back so I can see all of you.", now, { interrupt: true });
     }
 

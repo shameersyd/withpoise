@@ -332,6 +332,21 @@ export const AXIS_LIMIT = 0.65;
 // to turn, rather than shown a score built out of whatever survived.
 export const TURN_LIMIT_DEGREES = 55;
 
+// And the mirror of it, for a pose that only exists side-on: below this much
+// turn the user is too square to the camera for the pose to be legible at all.
+//
+// The reading is conservative. Depth compression flattens the body towards the
+// image plane, so a user genuinely at 10° to the camera reads as around 47°,
+// and the threshold has to sit above that to fire at all.
+export const SIDE_MIN_TURN_DEGREES = 50;
+
+/** Is the user standing the way this pose needs them to? */
+export function facingWrongWay(view, turnDegrees) {
+  return view === "side"
+    ? turnDegrees < SIDE_MIN_TURN_DEGREES
+    : turnDegrees > TURN_LIMIT_DEGREES;
+}
+
 /**
  * Per joint: how much of its angle is being read off the camera's depth axis,
  * and whether that leaves anything worth scoring.
@@ -599,13 +614,30 @@ export function figureLandmarks(P) {
   return out;
 }
 
-export function buildReference(rig, len) {
+/**
+ * Build the figure a rig describes.
+ *
+ * `view` says which way the body is turned relative to the camera, and the only
+ * thing it changes is the axis the left and right sides separate along.
+ *
+ *   front  the body's left-right axis lies across the image, so the two sides
+ *          are drawn apart and the camera sees the pose's shape directly
+ *   side   the body's left-right axis lies along the camera axis, so the two
+ *          sides sit one behind the other and project onto each other
+ *
+ * That is what a side-on pose actually is, and getting it wrong is not
+ * cosmetic: the target angles are derived from this figure, so a Downward Dog
+ * built with its shoulders splayed across the image would be scored against a
+ * shape nobody is holding.
+ */
+export function buildReference(rig, len, view) {
   const SEG = len || SEG_DEFAULT;
   const hipC = { x: 0.5, y: 0.62, z: 0 };
   const up = dirVec(rig.torso);
   const shC = along(hipC, SEG.torso, up);
   const torsoTheta = Array.isArray(rig.torso) ? rig.torso[0] : rig.torso;
-  const perp = dirVec(torsoTheta - 90);   // +perp points to the body's anatomical left
+  // +perp points to the body's anatomical left.
+  const perp = view === "side" ? { x: 0, y: 0, z: 1 } : dirVec(torsoTheta - 90);
   const P = { nose: along(shC, SEG.neck, up) };
 
   for (const [side, sgn] of [["left", 1], ["right", -1]]) {

@@ -44,8 +44,8 @@ const isDirection = (v) =>
   (Array.isArray(v) && v.length === 2 && v.every(isFiniteNumber));
 
 /** The eight target angles this rig implies, in degrees. */
-export function deriveTargets(rig) {
-  return computeAngles(figureLandmarks(buildReference(rig)), null, 1, 1);
+export function deriveTargets(rig, view) {
+  return computeAngles(figureLandmarks(buildReference(rig, null, view)), null, 1, 1);
 }
 
 /**
@@ -181,7 +181,7 @@ export function validatePose(key, pose) {
   if (!problems.length) {
     let targets;
     try {
-      targets = deriveTargets(pose.rig);
+      targets = deriveTargets(pose.rig, pose.view);
     } catch (err) {
       bad("rig", `cannot be built into a figure: ${err.message}`);
       return problems;
@@ -198,7 +198,8 @@ export function validatePose(key, pose) {
 
 /** A validated definition, with its targets worked out and defaults filled in. */
 export function compilePose(key, pose) {
-  const targets = deriveTargets(pose.rig);
+  const view = pose.view || "front";
+  const targets = deriveTargets(pose.rig, view);
   const specs = pose.joints || {};
   const fallback = specs.default || {};
 
@@ -211,7 +212,7 @@ export function compilePose(key, pose) {
     weights[joint] = spec.weight ?? fallback.weight ?? DEFAULT_WEIGHT;
   }
 
-  return { ...pose, key, view: pose.view || "front", angles, weights };
+  return { ...pose, key, view, angles, weights };
 }
 
 /**

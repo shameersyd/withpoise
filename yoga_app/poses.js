@@ -172,6 +172,48 @@ export const YOGA_POSES = {
       left_elbow: { tolerance: 20 }, right_elbow: { tolerance: 20 },
     },
   },
+  downdog: {
+    name: "Downward Dog",
+    sanskrit: "Adho Mukha Svanasana",
+    emoji: "🐕",
+    // The whole shape lives in the sagittal plane: hands and feet on the floor,
+    // hips at the apex. Seen head-on it is a body pointing at the lens and
+    // there is nothing in the image to measure, so it asks to be filmed from
+    // the side — where every angle it cares about is laid out flat.
+    view: "side",
+    symmetric: true,
+    description: "An inverted V that lengthens the whole back of the body — the pose you rest in.",
+    steps: [
+      { text: "Start on hands and knees, hands a little ahead of your shoulders", focus: ["left_arm","right_arm"] },
+      { text: "Tuck your toes and lift your hips up and back", focus: ["torso"] },
+      { text: "Straighten your legs as far as they go without rounding your back", focus: ["left_leg","right_leg"] },
+      { text: "Press the floor away — arms straight, in one line with your spine", focus: ["left_arm","right_arm","torso"] },
+      { text: "Let your head hang between your arms and look towards your feet", focus: ["head"] },
+    ],
+    tips: [
+      { icon: "📐", text: "Stand side-on to the camera — this one can't be seen from the front" },
+      { icon: "✅", text: "A long spine matters more than straight legs — bend the knees if you need to" },
+      { icon: "⚠️", text: "Don't let your shoulders creep up around your ears" },
+    ],
+    rig: {
+      torso: 221,
+      arm_left: { upper: 218, fore: 213 }, arm_right: { upper: 218, fore: 213 },
+      // 307 and 302 rather than round numbers: the torso-plus-arm line is
+      // longer than the leg, so the two only reach the same floor if the legs
+      // are laid a little shallower. Hands and feet ending at different heights
+      // is the thing that makes a drawn Down Dog look wrong.
+      leg_left: { thigh: 307, shin: 302 }, leg_right: { thigh: 307, shin: 302 },
+    },
+    // The hips are the pose; the legs are negotiable and the tips say so. The
+    // arm line is what keeps the weight off the shoulders.
+    joints: {
+      default: { tolerance: 25, weight: 1 },
+      left_hip: { tolerance: 22, weight: 3 }, right_hip: { tolerance: 22, weight: 3 },
+      left_shoulder: { tolerance: 25, weight: 2 }, right_shoulder: { tolerance: 25, weight: 2 },
+      left_knee: { tolerance: 30, weight: 1 }, right_knee: { tolerance: 30, weight: 1 },
+      left_elbow: { tolerance: 20, weight: 2 }, right_elbow: { tolerance: 20, weight: 2 },
+    },
+  },
   triangle: {
     name: "Triangle Pose",
     // Written for one side; the other is derived by mirrorPose(). For the

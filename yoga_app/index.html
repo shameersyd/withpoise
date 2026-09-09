@@ -751,7 +751,7 @@
 // the session state.
 import {
   LM, SKELETON, computeAngles, reliableLandmarks, matchSinglePose, correctionsFor,
-  bodyFrame, jointMeasurability, TURN_LIMIT_DEGREES, VerdictLatch,
+  bodyFrame, jointMeasurability, facingWrongWay, VerdictLatch,
   sidesOf, SideSelector,
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
@@ -788,7 +788,10 @@ import { FrameBudget } from "./pacing.js";
 // the demo, the target outline and the scoring all have to be the same shape.
 const VARIANTS = {};
 for (const [key, pose] of Object.entries(YOGA_POSES)) {
-  VARIANTS[key] = sidesOf(pose).map((p) => ({ pose: p, reference: buildReference(p.rig) }));
+  VARIANTS[key] = sidesOf(pose).map((p) => ({
+    pose: p,
+    reference: buildReference(p.rig, null, p.view),
+  }));
 }
 const primary = (key) => VARIANTS[key][0];
 
@@ -1038,7 +1041,7 @@ function updateTrackingUI(poseName, match, shown, detected) {
   const { score, unscored } = match;
   const jointResults = shown || match.results;
   const uncertain = match.uncertain || [];
-  const turned = (match.turnDegrees || 0) > TURN_LIMIT_DEGREES;
+  const turned = facingWrongWay(match.view || "front", match.turnDegrees || 0);
   noPoseMsg.classList.remove("visible");
 
   // Too little of the body in view — or too little of it facing the lens — to
@@ -1051,10 +1054,14 @@ function updateTrackingUI(poseName, match, shown, detected) {
     poseBadge.textContent = `🧘 ${sessionPrefix()}${poseName}`;
     scoreValue.textContent = "—";
     scoreValue.style.color = "var(--text-secondary)";
-    scoreLabel.textContent = turned ? "Turn towards the camera" : "Can't see enough";
+    const sideways = (match.view || "front") === "side";
+    scoreLabel.textContent = turned
+      ? (sideways ? "Turn side-on" : "Turn towards the camera")
+      : "Can't see enough";
     scoreLabel.style.color = "var(--text-secondary)";
     scoreDetail.textContent = turned
-      ? "You're side-on — from here the camera can't judge your angles"
+      ? (sideways ? "This pose can only be read from the side"
+                  : "You're side-on — from here the camera can't judge your angles")
       : "Step back so more of you is in frame";
     return;
   }
@@ -1088,7 +1095,8 @@ function updateTrackingUI(poseName, match, shown, detected) {
   if (unsure) asides.push(`${unsure} facing away`);
   if (hidden) asides.push(`${hidden} hidden`);
   scoreDetail.textContent = turned && unsure
-    ? `${aligned} of ${total} judged — turn to face the camera`
+    ? `${aligned} of ${total} judged — ${(match.view || "front") === "side"
+        ? "turn side-on" : "turn to face the camera"}`
     : [`${aligned} of ${total} joints aligned`, ...asides].join(" · ");
 
   perfectGlow.classList.toggle("visible", score >= 97 && !partial);
@@ -1658,8 +1666,17 @@ const TORSO = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"];
  * Tracking needs the torso and nothing more. Everything else — ankles out of
  * shot in a small room, a wrist behind your back — is greyed out and left
  * unscored instead of blocking the session.
+ *
+ * A side-on pose gets a looser test. Seen from the side the far shoulder and
+ * hip are behind the body, and MediaPipe reports them at low confidence
+ * precisely because they cannot be seen; demanding all four would make a pose
+ * like Downward Dog impossible to start. One of each still places the torso.
  */
-function torsoVisible(reliable) {
+function torsoVisible(reliable, view) {
+  if (view === "side") {
+    return (reliable.has("left_shoulder") || reliable.has("right_shoulder")) &&
+           (reliable.has("left_hip") || reliable.has("right_hip"));
+  }
   return TORSO.every(name => reliable.has(name));
 }
 
@@ -1693,6 +1710,7 @@ function resetTrackPhase() {
   readySince = 0;
   latestResult = null;
   resetBodyLengths();
+  resetOutlineFlip();
   verdicts.reset();
   sideSelector.reset();
   currentVariant = null;
@@ -1785,11 +1803,40 @@ function ghostSegColor(jointResults, reliable) {
  * The target pose in canvas pixels: built from the user's own limb lengths and
  * pinned to their hips. Shared by the outline and the correction arrows.
  */
+/**
+ * Which way round to draw a side-on pose.
+ *
+ * A side-view rig is drawn facing one way — Downward Dog with its head to the
+ * left — and a user is equally likely to have set up facing the other. The
+ * pose scores the same either way, since it is symmetric, but an outline
+ * pointing the wrong way is unmistakably wrong to look at.
+ *
+ * Decided from where the head sits relative to the hips, and latched: near the
+ * deadzone the sign is meaningless, so the last decision stands rather than
+ * flickering. Front poses never flip — which way the body faces is already
+ * settled there by the side selector, on the score.
+ */
+let outlineFlip = false;
+const resetOutlineFlip = () => { outlineFlip = false; };
+
+function shouldFlip(variant, figure, landmarks, w, len) {
+  if (variant.pose.view !== "side") return false;
+
+  const hipX = (landmarks[LM.left_hip].x + landmarks[LM.right_hip].x) / 2 * w;
+  const headX = landmarks[LM.nose].x * w;
+  if (Math.abs(headX - hipX) < 0.3 * len.torso) return outlineFlip;   // too square to tell
+
+  const refHipX = (figure.left_hip.x + figure.right_hip.x) / 2;
+  outlineFlip = Math.sign(headX - hipX) !== Math.sign(figure.nose.x - refHipX);
+  return outlineFlip;
+}
+
 function buildTargetFigure(variant, landmarks, w, h) {
   const len = measureBody(landmarks, w, h);
   if (!len) return null;
 
-  const figure = buildReference(variant.pose.rig, len);
+  const figure = buildReference(variant.pose.rig, len, variant.pose.view);
+  const flip = shouldFlip(variant, figure, landmarks, w, len);
   const hipPx = {
     x: (landmarks[LM.left_hip].x + landmarks[LM.right_hip].x) / 2 * w,
     y: (landmarks[LM.left_hip].y + landmarks[LM.right_hip].y) / 2 * h,
@@ -1799,7 +1846,8 @@ function buildTargetFigure(variant, landmarks, w, h) {
 
   const placed = {};
   for (const [name, p] of Object.entries(figure)) {
-    placed[name] = { x: hipPx.x + (p.x - refHip.x), y: hipPx.y + (p.y - refHip.y) };
+    const dx = p.x - refHip.x;
+    placed[name] = { x: hipPx.x + (flip ? -dx : dx), y: hipPx.y + (p.y - refHip.y) };
   }
   setHeadRadius(placed, headRadius(figure));
   return placed;
@@ -1913,7 +1961,7 @@ let regainedSince = 0;
 
 function framingProblem(landmarks, reliable, ev) {
   if (!landmarks) return "gone";
-  if (!torsoVisible(reliable)) return "framing";
+  if (!torsoVisible(reliable, YOGA_POSES[selectedPoseKey].view)) return "framing";
   if (ev && ev.match.coverage < MIN_COVERAGE) return "coverage";
   return null;
 }
@@ -2029,15 +2077,18 @@ function startTrackingLoop() {
 
     // ── Get ready: hold the outline until the torso is in shot, then count in ──
     if (trackPhase !== "live" && trackPhase !== "lost") {
-      const ready = reliable && torsoVisible(reliable);
+      const ready = reliable && torsoVisible(reliable, pose.view);
 
       if (!ready) {
         readySince = 0;
         trackPhase = "framing";
-        setOverlay(landmarks ? "framing-seen" : "framing-none", "Get into frame",
-          landmarks ? "Turn so the camera can see your shoulders and hips."
-                    : "Stand where the camera can see you.");
-        speakFrom({ phase: "framing", detected: !!landmarks }, timestamp);
+        setOverlay(landmarks ? `framing-seen-${pose.view}` : "framing-none",
+          "Get into frame",
+          !landmarks ? "Stand where the camera can see you."
+            : pose.view === "side"
+              ? "Stand side-on to the camera — this pose can't be read from the front."
+              : "Turn so the camera can see your shoulders and hips.");
+        speakFrom({ phase: "framing", detected: !!landmarks, view: pose.view }, timestamp);
       } else {
         if (!readySince) readySince = timestamp;
         if (trackPhase === "framing" && timestamp - readySince > 500) {
@@ -2102,7 +2153,8 @@ function startTrackingLoop() {
     if (trackPhase === "lost") {
       updateHoldBar(holdTimer.update(false, timestamp));
       setOverlay(`lost-${lostReason}`, LOST_TITLES[lostReason], LOST_SUBS[lostReason]);
-      speakFrom({ phase: "lost", reason: lostReason, detected: !!landmarks }, timestamp);
+      speakFrom({ phase: "lost", reason: lostReason, detected: !!landmarks,
+                  view: YOGA_POSES[selectedPoseKey].view }, timestamp);
       updateTrackingUI("", null, null, false);
 
       if (!problem) {
@@ -2151,7 +2203,9 @@ function startTrackingLoop() {
       correct: solid,
       corrections: match.corrections,
       results: shown,
-      needsTurn: match.turnDegrees > TURN_LIMIT_DEGREES && match.uncertain.length > 0,
+      view: chosen.variant.pose.view,
+      needsTurn: facingWrongWay(chosen.variant.pose.view, match.turnDegrees) &&
+                 match.uncertain.length > 0,
       tooLittleVisible: match.coverage < PARTIAL_COVERAGE,
       hold,
     }, timestamp);

@@ -1,7 +1,7 @@
 import { suite, test, assert, assertEqual, assertClose, assertDeepEqual, assertSameSet } from "./harness.js";
 import {
   LM, computeAngles, matchSinglePose, reliableLandmarks, correctionsFor, calcAngle,
-  bodyFrame, toBodyFrame, jointMeasurability, v3, TURN_LIMIT_DEGREES,
+  bodyFrame, toBodyFrame, jointMeasurability, v3, TURN_LIMIT_DEGREES, facingWrongWay,
   jointQuality, VerdictLatch, FALLOFF_MARGIN,
   sidesOf, mirrorPose, mirrorRig, mirrorJoint, mirrorText, SideSelector, buildReference,
 } from "../yoga_app/pose-core.js";
@@ -56,7 +56,11 @@ for (const key of POSES) {
 // What one bent shin costs, per pose. These differ because the joint's weight
 // differs: the same fault is worth more in Tree, where the standing leg is the
 // pose, than in Mountain, where it is one of four equally weighted essentials.
-const FAULT_SCORE = { mountain: 83.33, warrior1: 87.85, warrior2: 87.85, tree: 80.00 };
+// What one bent shin costs, per pose. Downward Dog barely notices, and that is
+// the weights doing their job: its own tips say to bend the knees if you need
+// to, so its knee carries a wide tolerance and the least weight in the pose.
+const FAULT_SCORE = { mountain: 83.33, warrior1: 87.85, warrior2: 87.85,
+                      tree: 80.00, downdog: 95.95 };
 
 for (const key of POSES.filter(k => k !== "triangle")) {
   test(`${key}: a bent shin fails that knee and only that knee`, () => {
@@ -109,7 +113,7 @@ for (const key of POSES) {
     // Coverage carries that, and it is what stops the UI saying "Perfect form".
     const r = score(key, "partial");
     assertEqual(r.score, 100, "what was judged was correct");
-    assert(r.coverage < 0.5, `coverage ${(r.coverage * 100).toFixed(0)}%`);
+    assert(r.coverage <= 0.5, `coverage ${(r.coverage * 100).toFixed(0)}%`);
     assert(r.coverage > 0, "but something was judged");
   });
 }
@@ -140,21 +144,50 @@ test("a rigid turn changes no joint angle at all", () => {
 // score exactly what it scores head-on, with nothing quietly dropped to get
 // there.
 for (const key of POSES) {
-  test(`${key}: 30° off-axis scores the same as head-on, judging every joint`, () => {
-    const head = score(key, "correct");
+  test(`${key}: 30° off the right view scores the same as standing in it`, () => {
+    const ideal = score(key, "correct");
     const turned = score(key, "turned");
-    assertClose(turned.score, head.score, 0.001, "score");
-    assertEqual(turned.scored, head.scored, "joints judged");
-    assertDeepEqual(turned.uncertain, [], "nothing written off as unmeasurable");
-    assertDeepEqual(turned.corrections, [], "and no invented faults");
+    assertClose(turned.score, ideal.score, 0.001, "score");
+    assertDeepEqual(turned.corrections, [], "no invented faults");
   });
 }
+
+for (const key of POSES.filter(k => YOGA_POSES[k].view === "front")) {
+  test(`${key}: 30° off-axis still judges every joint`, () => {
+    const turned = score(key, "turned");
+    assertEqual(turned.scored, 8, "joints judged");
+    assertDeepEqual(turned.uncertain, [], "nothing written off as unmeasurable");
+  });
+}
+
+test("Downward Dog 30° off its view loses the plane it lives in, and says so", () => {
+  // The reverse of every front pose, and the whole reason a pose declares a
+  // view. Turning towards the camera is what destroys this one.
+  const turned = score("downdog", "turned");
+  assert(turned.uncertain.length >= 4, `only ${turned.uncertain.length} joints written off`);
+  assert(turned.coverage < 0.6, `coverage ${(turned.coverage * 100).toFixed(0)}%`);
+  assertDeepEqual(turned.corrections, [], "but nothing is invented out of it");
+});
+
+test("Downward Dog seen the right way is fully judged, depth loss and all", () => {
+  // Side-on is the worst possible view for depth — the fixture compresses it to
+  // 0.39x — and this pose is completely legible there anyway, because every
+  // angle it cares about lies in the plane the camera can still see.
+  const r = score("downdog", "correct");
+  assertEqual(r.score, 100, "score");
+  assertEqual(r.coverage, 1, "every joint judged");
+  assertDeepEqual(r.uncertain, [], "none written off");
+  assert(r.frame.turnDegrees > 80, `and it reads as side-on: ${r.frame.turnDegrees.toFixed(0)}°`);
+});
 
 // Edge-on, the body's frontal plane is gone and its sagittal plane is if
 // anything clearer than before. What survives is judged; what does not is named
 // rather than guessed at. Nothing here scores as a fault: the user is holding
 // every one of these correctly.
 const EDGE_ON_UNCERTAIN = {
+  // Downward Dog turned towards the camera loses the sagittal plane it lives in,
+  // which is the reverse of every other pose here and the reason `view` exists.
+  downdog: ["left_hip", "right_hip", "left_knee", "right_knee"],
   mountain: [],   // arms and legs hang along the spine — readable from any angle
   warrior1: ["left_hip", "left_knee"],
   warrior2: ["left_elbow", "left_hip", "left_knee", "left_shoulder", "right_elbow", "right_shoulder"],
@@ -172,16 +205,18 @@ for (const key of POSES) {
   });
 }
 
-test("edge-on is reported as a turn the user can act on", () => {
+test("standing the wrong way for the pose is reported as a turn to make", () => {
+  // "Wrong way" is not one direction. A front pose goes wrong by turning away
+  // from the camera; Downward Dog goes wrong by turning towards it.
   for (const key of POSES) {
     const r = score(key, "edgeOn");
-    assert(r.frame.turnDegrees > TURN_LIMIT_DEGREES,
-      `${key} reads ${r.frame.turnDegrees.toFixed(0)}°, under the ${TURN_LIMIT_DEGREES}° warning`);
+    assert(facingWrongWay(YOGA_POSES[key].view, r.frame.turnDegrees),
+      `${key} reads ${r.frame.turnDegrees.toFixed(0)}° and no warning fires`);
   }
   for (const key of POSES) {
     const r = score(key, "turned");
-    assert(r.frame.turnDegrees < TURN_LIMIT_DEGREES,
-      `${key} at 30° should not trigger a warning, reads ${r.frame.turnDegrees.toFixed(0)}°`);
+    assert(!facingWrongWay(YOGA_POSES[key].view, r.frame.turnDegrees),
+      `${key} at 30° off should not warn, reads ${r.frame.turnDegrees.toFixed(0)}°`);
   }
 });
 
@@ -244,13 +279,34 @@ test("scoring in the body frame is a no-op, which is why we do not", () => {
 
 suite("joint measurability");
 
-test("everything is measurable when the user faces the camera", () => {
+test("every pose is measurable in the view it asks for", () => {
+  // Including Downward Dog, which asks to be seen from the side — the angle at
+  // which a monocular camera knows least about depth, and the only angle at
+  // which this pose has any shape to read.
   for (const key of POSES) {
     const m = jointMeasurability(fixture(key).variants.correct.world);
     for (const [joint, r] of Object.entries(m)) {
       assert(r.measurable, `${key} ${joint} share ${r.depthShare.toFixed(2)}`);
+    }
+  }
+});
+
+test("a front pose seen head-on has no depth component at all", () => {
+  for (const key of POSES.filter(k => YOGA_POSES[k].view === "front")) {
+    const m = jointMeasurability(fixture(key).variants.correct.world);
+    for (const [joint, r] of Object.entries(m)) {
       assertClose(r.depthShare, 0, 1e-6, `${key} ${joint} lies in the frontal plane`);
     }
+  }
+});
+
+test("a side pose seen side-on has almost none either", () => {
+  // Not exactly zero — the shoulders and hips are separated along the camera
+  // axis, so the segments that reach them are very slightly out of plane. The
+  // margin to the 0.65 limit is what matters, and it is enormous.
+  const m = jointMeasurability(fixture("downdog").variants.correct.world);
+  for (const [joint, r] of Object.entries(m)) {
+    assert(r.depthShare < 0.1, `${joint} share ${r.depthShare.toFixed(3)}`);
   }
 });
 
@@ -497,8 +553,8 @@ suite("mirroring");
 
 const ASYMMETRIC = POSES.filter(k => !YOGA_POSES[k].symmetric);
 
-test("only Mountain is symmetric", () => {
-  assertDeepEqual(POSES.filter(k => YOGA_POSES[k].symmetric), ["mountain"]);
+test("the symmetric poses are the ones that are the same on both sides", () => {
+  assertDeepEqual(POSES.filter(k => YOGA_POSES[k].symmetric).sort(), ["downdog", "mountain"]);
   assertEqual(sidesOf(YOGA_POSES.mountain).length, 1, "nothing to mirror");
   for (const key of ASYMMETRIC) {
     assertEqual(sidesOf(YOGA_POSES[key]).length, 2, `${key} has two sides`);
