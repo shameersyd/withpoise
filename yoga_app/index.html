@@ -126,6 +126,62 @@
       flex-shrink: 0;
     }
 
+    /* Queue toggle. Sits inside the card but swallows the tap, so the card
+       body still opens the walkthrough. */
+    .pose-card-add {
+      width: 40px; height: 40px; flex-shrink: 0;
+      border-radius: 50%;
+      border: 1px solid var(--border-glass);
+      background: rgba(255,255,255,0.05);
+      color: var(--text-secondary);
+      font-family: var(--font); font-size: 20px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .pose-card-add.queued {
+      background: var(--cyan); border-color: var(--cyan); color: #05121a;
+    }
+
+    #session-bar {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      display: none; align-items: center; gap: 14px;
+      padding: 14px 20px;
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border-glass);
+      z-index: 40;
+    }
+    #session-bar.visible { display: flex; }
+    #session-count { flex: 1; font-size: 14px; color: var(--text-secondary); }
+    #session-count b { color: var(--text-primary); font-weight: 600; }
+    #btn-session-start {
+      border: none; border-radius: 12px;
+      padding: 13px 20px;
+      background: linear-gradient(135deg, var(--cyan), #0091ea);
+      color: #fff; font-family: var(--font);
+      font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    #btn-session-start:active { transform: scale(0.97); opacity: 0.9; }
+
+    .icon-btn.muted { opacity: 0.4; }
+
+    /* How much of the hold is banked. Deliberately not a number: at arm's
+       length a bar reads and a countdown does not, and the countdown is spoken
+       anyway. */
+    #hold-bar {
+      margin: 8px -14px -6px; height: 4px; border-radius: 2px;
+      background: rgba(255,255,255,0.12);
+      overflow: hidden; opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    #hold-bar.visible { opacity: 1; }
+    #hold-fill {
+      height: 100%; width: 0%;
+      background: var(--green);
+      transition: width 0.15s linear;
+    }
+
     /* ── Guide Screen ── */
     #screen-guide {
       background: var(--bg-primary);
@@ -522,6 +578,10 @@
   </div>
   <div class="pose-grid" id="pose-grid"></div>
 </div>
+<div id="session-bar">
+  <span id="session-count"></span>
+  <button id="btn-session-start">Start session →</button>
+</div>
 
 <!-- ═══════════ POSE GUIDE SCREEN ═══════════ -->
 <div class="screen" id="screen-guide">
@@ -579,6 +639,7 @@
     <div class="top-btn-group">
       <button class="icon-btn" id="btn-back-guide" title="Change Pose">🔙</button>
       <button class="icon-btn" id="btn-how-to" title="How to do this pose">❔</button>
+      <button class="icon-btn" id="btn-sound" title="Spoken coaching">🔊</button>
       <button class="icon-btn" id="btn-ghost" title="Toggle target outline">👤</button>
       <button class="icon-btn" id="btn-flip" title="Flip Camera">🔄</button>
     </div>
@@ -589,6 +650,7 @@
     <div id="score-value">—</div>
     <div id="score-label"></div>
     <div id="score-detail"></div>
+    <div id="hold-bar"><div id="hold-fill"></div></div>
   </div>
 
   <div id="no-pose-msg">Get into position! 🧘</div>
@@ -640,6 +702,8 @@ import {
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
+import { Coach, HoldTimer, Session, rankCorrections } from "./coach.js";
+import { Voice } from "./voice.js";
 
 // Every pose, both ways round. An asymmetric pose is written for one side and
 // its mirror is derived, so there is one definition to keep correct rather than
@@ -907,7 +971,7 @@ function updateTrackingUI(poseName, match, shown, detected) {
     correctionsPanel.classList.remove("visible");
     perfectGlow.classList.remove("visible");
     statusCard.classList.add("visible");
-    poseBadge.textContent = `🧘 ${poseName}`;
+    poseBadge.textContent = `🧘 ${sessionPrefix()}${poseName}`;
     scoreValue.textContent = "—";
     scoreValue.style.color = "var(--text-secondary)";
     scoreLabel.textContent = turned ? "Turn towards the camera" : "Can't see enough";
@@ -935,7 +999,7 @@ function updateTrackingUI(poseName, match, shown, detected) {
   // read as a verdict on the whole pose.
   const partial = (match.coverage ?? 1) < 0.999;
   statusCard.classList.add("visible");
-  poseBadge.textContent = score >= 80 ? `✅ ${poseName}` : `🧘 ${poseName}`;
+  poseBadge.textContent = `${score >= 80 ? "✅" : "🧘"} ${sessionPrefix()}${poseName}`;
   scoreValue.textContent = `${Math.round(score)}%`;
   scoreValue.style.color = color;
   scoreLabel.textContent = partial ? scoreLabelFor(score, true) : scoreLabelFor(score);
@@ -952,7 +1016,7 @@ function updateTrackingUI(poseName, match, shown, detected) {
 
   perfectGlow.classList.toggle("visible", score >= 97 && !partial);
 
-  const corrections = correctionsFor(jointResults, CORRECTION_TIPS);
+  const corrections = match.corrections || correctionsFor(jointResults, CORRECTION_TIPS);
 
   if (corrections.length > 0) {
     correctionsPanel.classList.add("visible");
@@ -1019,11 +1083,110 @@ for (const [key, pose] of Object.entries(YOGA_POSES)) {
       <div class="sanskrit">${pose.sanskrit}</div>
       <p>${pose.description}</p>
     </div>
-    <div class="pose-card-arrow">›</div>
+    <button class="pose-card-add" data-key="${key}" aria-label="Add to session">+</button>
   `;
   card.addEventListener("click", () => showGuide(key));
+  card.querySelector(".pose-card-add").addEventListener("click", (e) => {
+    e.stopPropagation();      // the card body still opens the walkthrough
+    toggleQueued(key);
+  });
   poseGrid.appendChild(card);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Session queue
+//
+// A session runs hands-free, which is the point: you cannot tap a phone while
+// holding Triangle. Poses are queued here, then held one after another with
+// the count-in, the corrections and the advance all spoken.
+// ─────────────────────────────────────────────────────────────
+const queued = [];
+let session = null;
+
+function toggleQueued(key) {
+  const at = queued.indexOf(key);
+  if (at >= 0) queued.splice(at, 1); else queued.push(key);
+  renderQueue();
+}
+
+function renderQueue() {
+  document.querySelectorAll(".pose-card-add").forEach((btn) => {
+    const on = queued.includes(btn.dataset.key);
+    btn.classList.toggle("queued", on);
+    btn.textContent = on ? String(queued.indexOf(btn.dataset.key) + 1) : "+";
+  });
+  const bar = document.getElementById("session-bar");
+  bar.classList.toggle("visible", queued.length > 0);
+  const holds = queued.reduce((n, k) => n + (YOGA_POSES[k].symmetric ? 1 : 2), 0);
+  document.getElementById("session-count").innerHTML =
+    `<b>${queued.length}</b> pose${queued.length === 1 ? "" : "s"} · ${holds} holds`;
+}
+
+const sessionPrefix = () =>
+  session && !session.finished ? `${session.position}/${session.length} · ` : "";
+
+const sessionNote = () =>
+  session && !session.finished ? `${session.position} of ${session.length}` : null;
+
+/**
+ * A hold has completed. Move the session on — to the other side of the same
+ * pose, to the next pose, or to the end.
+ *
+ * Which side was held is whichever one the tracker settled on, so a user who
+ * chooses to start on their right is not corrected for it.
+ */
+function advanceSession() {
+  const side = currentVariant && !currentVariant.pose.symmetric
+    ? currentVariant.pose.side : null;
+  const result = session.complete(side);
+
+  if (result.finished) {
+    voice.speak("That's your session. Well done.", { interrupt: true });
+    endSession();
+    return;
+  }
+  if (result.advanced) {
+    selectedPoseKey = session.current.key;
+    resetTrackPhase();          // count the user into the next pose
+    return;
+  }
+
+  // Same pose, other side still owed. The side latch is cleared so the tracker
+  // re-decides from scratch rather than defending the side just finished.
+  holdTimer.reset();
+  coach.nextPose();
+  sideSelector.reset();
+  updateHoldBar({ state: "idle", remaining: HOLD_SECONDS });
+  voice.speak("Now the other side.", { interrupt: true });
+}
+
+function endSession() {
+  session = null;
+  queued.length = 0;
+  renderQueue();
+  setTimeout(() => {
+    if (!isTracking) return;    // the user already left
+    isTracking = false;
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    stopCamera();
+    resetTrackPhase();
+    showScreen("screen-select");
+  }, 2800);
+}
+
+document.getElementById("btn-session-start").addEventListener("click", async () => {
+  if (!queued.length) return;
+  voice.prime();                // must happen inside the tap, or iOS stays mute
+  session = new Session(queued.slice(),
+    Object.fromEntries(queued.map((k) => [k, !YOGA_POSES[k].symmetric])));
+  selectedPoseKey = session.current.key;
+  stopDemoLoop();
+  showScreen("screen-track");
+  isTracking = true;
+  resetTrackPhase();
+  await startCamera();
+  startTrackingLoop();
+});
 
 // ─────────────────────────────────────────────────────────────
 // Guide Screen
@@ -1249,6 +1412,50 @@ function setModel(model) {
 // restarts so a new pose never inherits the last one's colours.
 const verdicts = new VerdictLatch();
 
+// ── Coaching ──
+// What counts as holding the pose. Not 100%: a body held still is never
+// exactly on its targets, and a bar nobody can clear is the same as no bar.
+// Coverage has to be in it too — you cannot certify a hold you could not see.
+const HOLD_SECONDS = 10;
+const HOLD_SCORE = 88;
+const HOLD_COVERAGE = 0.7;
+const ADVANCE_DELAY_MS = 2600;   // let the chime and "nice" land before moving on
+
+const voice = new Voice();
+const coach = new Coach();
+const holdTimer = new HoldTimer({ seconds: HOLD_SECONDS });
+let completedAt = 0;
+
+const holdBar = document.getElementById("hold-bar");
+const holdFill = document.getElementById("hold-fill");
+const btnSound = document.getElementById("btn-sound");
+
+function renderSound() {
+  btnSound.textContent = voice.enabled ? "🔊" : "🔇";
+  btnSound.classList.toggle("muted", !voice.enabled);
+  btnSound.title = voice.enabled ? "Spoken coaching on" : "Spoken coaching off";
+}
+btnSound.addEventListener("click", () => {
+  voice.enabled = !voice.enabled;
+  renderSound();
+});
+renderSound();
+
+/** One utterance per frame at most, and usually none. */
+function speakFrom(state, now) {
+  const said = coach.update(state, now);
+  if (said) voice.speak(said.text, { interrupt: said.interrupt });
+}
+
+function updateHoldBar(hold) {
+  const active = hold.state === "holding" || hold.state === "complete";
+  holdBar.classList.toggle("visible", active);
+  const done = hold.state === "complete"
+    ? 1
+    : 1 - hold.remaining / HOLD_SECONDS;
+  holdFill.style.width = `${Math.round(Math.max(0, Math.min(1, done)) * 100)}%`;
+}
+
 // loading → framing → countdown → live
 let trackPhase = "framing";
 let countdownStart = 0;
@@ -1306,6 +1513,10 @@ function resetTrackPhase() {
   verdicts.reset();
   sideSelector.reset();
   currentVariant = null;
+  holdTimer.reset();
+  coach.nextPose();
+  completedAt = 0;
+  updateHoldBar({ state: "idle", remaining: HOLD_SECONDS });
   if (poseWorker && workerReady) poseWorker.postMessage({ type: "reset" });
   overlayState = "";
   trackOverlay.classList.remove("hidden", "fading");
@@ -1433,6 +1644,8 @@ function drawGhost(ctx, variant, w, h, landmarks, jointResults, targetPx, reliab
 }
 
 document.getElementById("btn-begin").addEventListener("click", async () => {
+  voice.prime();
+  session = null;
   stopDemoLoop();
   showScreen("screen-track");
   isTracking = true;          // so resetTrackPhase can park us on "loading"
@@ -1442,6 +1655,8 @@ document.getElementById("btn-begin").addEventListener("click", async () => {
 });
 
 document.getElementById("btn-back-guide").addEventListener("click", () => {
+  session = null;
+  voice.cancel();
   isTracking = false;
   if (animFrameId) cancelAnimationFrame(animFrameId);
   stopCamera();
@@ -1518,6 +1733,7 @@ function startTrackingLoop() {
         setOverlay(landmarks ? "framing-seen" : "framing-none", "Get into frame",
           landmarks ? "Turn so the camera can see your shoulders and hips."
                     : "Stand where the camera can see you.");
+        speakFrom({ phase: "framing", detected: !!landmarks }, timestamp);
       } else {
         if (!readySince) readySince = timestamp;
         if (trackPhase === "framing" && timestamp - readySince > 500) {
@@ -1532,6 +1748,12 @@ function startTrackingLoop() {
           } else {
             setOverlay("countdown", "Match the outline",
               `Moving into ${pose.name}`, remaining);
+            speakFrom({
+              phase: "countdown",
+              poseLabel: pose.name,
+              sessionNote: sessionNote(),
+              countdown: remaining,
+            }, timestamp);
           }
         }
       }
@@ -1588,6 +1810,34 @@ function startTrackingLoop() {
       const judged = new Set(reliable);
       for (const joint of match.uncertain) judged.delete(joint);
 
+      // Ranked by how much of the pose each fault actually is, so the panel
+      // leads with the same thing the voice would say.
+      match.corrections = rankCorrections(correctionsFor(shown, CORRECTION_TIPS), shown);
+
+      const solid = match.score >= HOLD_SCORE && match.coverage >= HOLD_COVERAGE;
+      const hold = holdTimer.update(solid, timestamp);
+      updateHoldBar(hold);
+      if (hold.justCompleted) {
+        voice.chime();
+        completedAt = timestamp;
+      }
+
+      speakFrom({
+        phase: "live",
+        detected: true,
+        correct: solid,
+        corrections: match.corrections,
+        results: shown,
+        needsTurn: match.turnDegrees > TURN_LIMIT_DEGREES && match.uncertain.length > 0,
+        tooLittleVisible: match.scored === 0 || match.coverage < 0.45,
+        hold,
+      }, timestamp);
+
+      if (session && completedAt && timestamp - completedAt > ADVANCE_DELAY_MS) {
+        completedAt = 0;
+        advanceSession();
+      }
+
       const target = buildTargetFigure(chosen.variant, landmarks, w, h);
       if (ghostOn) {
         drawGhost(ctx, chosen.variant, w, h, landmarks, shown, target, judged);
@@ -1595,6 +1845,9 @@ function startTrackingLoop() {
       drawSkeleton(ctx, landmarks, w, h, shown, target, judged);
       updateTrackingUI(sidedName(chosen.variant.pose), match, shown, true);
     } else {
+      // Nobody in shot. The hold has to break — banking ten seconds of a pose
+      // the camera could not see would be the same lie the score used to tell.
+      updateHoldBar(holdTimer.update(false, timestamp));
       if (ghostOn) drawGhost(ctx, currentVariant || primary(selectedPoseKey), w, h, null, null);
       updateTrackingUI("", null, null, false);
     }
@@ -1643,6 +1896,7 @@ function init() {
   // The model downloads in the background: browsing poses and reading the
   // walkthrough need no landmarker, so there's nothing to wait for here.
   startWorker(currentModel);
+  renderQueue();
   showScreen("screen-select");
 }
 

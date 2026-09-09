@@ -657,3 +657,27 @@ test("the video and the overlay canvas are fitted to the screen the same way", (
   assert(/object-fit:\s*cover/.test(blocks[0].body),
     "which must set object-fit: cover, matching how the video is fitted");
 });
+
+test("the service worker precaches every module the app imports", () => {
+  // This list has fallen behind twice: once when the scoring core was split out
+  // of index.html, and once when the coaching modules were added. Both times
+  // the symptom would have been a first offline visit loading an index.html
+  // whose imports 404, which is not something a unit test would otherwise see.
+  const html = readFile("yoga_app/index.html");
+  const sw = readFile("yoga_app/sw.js");
+
+  const imported = [...html.matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(m => m[1]);
+  assert(imported.length >= 4, `expected several local imports, found ${imported.length}`);
+
+  const assets = sw.slice(sw.indexOf("const ASSETS"), sw.indexOf("];", sw.indexOf("const ASSETS")));
+  for (const file of imported) {
+    assert(assets.includes(`/${file}`), `sw.js does not precache ${file}`);
+  }
+
+  // The worker's own imports ride along on the same list.
+  const workerImports = [...readFile("yoga_app/pose-worker.js")
+    .matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(m => m[1]);
+  for (const file of workerImports) {
+    assert(assets.includes(`/${file}`), `sw.js does not precache ${file}, needed by the worker`);
+  }
+});

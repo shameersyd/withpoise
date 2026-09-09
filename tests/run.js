@@ -2,5 +2,6 @@
 import { run } from "./harness.js";
 import "./scoring.test.js";
 import "./filter.test.js";
+import "./coach.test.js";
 
 run();

@@ -1,7 +1,11 @@
 const CACHE_NAME = "yoga-pose-v3";
 const RUNTIME_CACHE = "yoga-pose-runtime-v3";
+// Precached so a first visit that goes offline mid-load still has a whole app.
+// After that the network-first rule keeps them fresh. tests/ asserts this list
+// covers everything index.html imports — it has silently fallen behind twice.
 const ASSETS = ["/", "/index.html", "/manifest.json",
-                "/pose-core.js", "/poses.js", "/pose-worker.js"];
+                "/pose-core.js", "/poses.js", "/pose-worker.js",
+                "/coach.js", "/voice.js"];
 
 // The MediaPipe runtime and the model files are large, immutable and versioned
 // in their URLs — worth keeping once fetched, so a second visit starts offline
