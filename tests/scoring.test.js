@@ -3,6 +3,7 @@ import {
   LM, computeAngles, matchSinglePose, reliableLandmarks, correctionsFor, calcAngle,
   bodyFrame, toBodyFrame, jointMeasurability, v3, TURN_LIMIT_DEGREES,
   jointQuality, VerdictLatch, FALLOFF_MARGIN,
+  sidesOf, mirrorPose, mirrorRig, mirrorJoint, mirrorText, SideSelector, buildReference,
 } from "../yoga_app/pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "../yoga_app/poses.js";
 
@@ -487,4 +488,140 @@ test("latching leaves the numbers alone", () => {
   assertEqual(out.left_knee.diff, 24, "still there");
   assertEqual(out.left_knee.target, 175);
   assertEqual(out.left_knee.quality, 0.8, "the graded value is untouched");
+});
+
+// ─────────────────────────────────────────────────────────────
+// Sides
+// ─────────────────────────────────────────────────────────────
+suite("mirroring");
+
+const ASYMMETRIC = POSES.filter(k => !YOGA_POSES[k].symmetric);
+
+test("only Mountain is symmetric", () => {
+  assertDeepEqual(POSES.filter(k => YOGA_POSES[k].symmetric), ["mountain"]);
+  assertEqual(sidesOf(YOGA_POSES.mountain).length, 1, "nothing to mirror");
+  for (const key of ASYMMETRIC) {
+    assertEqual(sidesOf(YOGA_POSES[key]).length, 2, `${key} has two sides`);
+  }
+});
+
+test("the mirrored rig builds the mirrored figure", () => {
+  // buildReference pins the hips at x = 0.5, so mirroring the rig has to come
+  // out as a reflection of the figure about that line, with the left and right
+  // labels swapped. If this holds, the demo drawing, the target outline and the
+  // scoring targets are all mirrored consistently — they are all built here.
+  for (const key of ASYMMETRIC) {
+    const original = buildReference(YOGA_POSES[key].rig);
+    const mirrored = buildReference(mirrorRig(YOGA_POSES[key].rig));
+    for (const name of Object.keys(original)) {
+      const there = mirrored[mirrorJoint(name)];
+      assertClose(there.x, 1 - original[name].x, 1e-9, `${key} ${name}.x`);
+      assertClose(there.y, original[name].y, 1e-9, `${key} ${name}.y`);
+      assertClose(there.z, original[name].z, 1e-9, `${key} ${name}.z`);
+    }
+  }
+});
+
+test("mirroring twice is the original pose", () => {
+  for (const key of POSES) {
+    const there = mirrorPose(YOGA_POSES[key]);
+    const back = mirrorPose(there);
+    assertDeepEqual(back.angles, YOGA_POSES[key].angles, `${key} angles`);
+    assertDeepEqual(back.weights, YOGA_POSES[key].weights, `${key} weights`);
+    assertDeepEqual(back.steps.map(s => s.text), YOGA_POSES[key].steps.map(s => s.text),
+      `${key} instructions`);
+    assertEqual(back.side, YOGA_POSES[key].side, `${key} side label`);
+  }
+});
+
+test("targets and weights swap sides together", () => {
+  const w1 = YOGA_POSES.warrior1, m = mirrorPose(w1);
+  assertDeepEqual(m.angles.right_knee, w1.angles.left_knee, "the bent knee changes leg");
+  assertDeepEqual(m.angles.left_knee, w1.angles.right_knee, "so does the straight one");
+  assertEqual(m.weights.right_knee, w1.weights.left_knee, "and the weight goes with it");
+});
+
+test("the instructions say the other side", () => {
+  const m = mirrorPose(YOGA_POSES.warrior1);
+  assert(m.steps[0].text.includes("left foot back"), m.steps[0].text);
+  assert(m.steps[1].text.includes("right (front) knee"), m.steps[1].text);
+  assertDeepEqual(m.steps[0].focus, ["left_leg"], "and so does the highlight");
+});
+
+test("mirrorText swaps whole words only, keeping case", () => {
+  assertEqual(mirrorText("Left hand to your right shin"), "Right hand to your left shin");
+  assertEqual(mirrorText("LEFT and Right"), "RIGHT and Left");
+  assertEqual(mirrorText("leftover birthright"), "leftover birthright", "not inside words");
+  assertEqual(mirrorText("left-hand side"), "right-hand side", "hyphens are boundaries");
+});
+
+test("a body doing the other side scores the mirrored pose, not the written one", () => {
+  // The whole point. Reflect a correct fixture — swap the left and right
+  // landmarks and negate x, which is what a person turning round does — and the
+  // written side should reject it while the mirror accepts it.
+  for (const key of ASYMMETRIC) {
+    const v = fixture(key).variants.correct;
+    const flip = (pts) => {
+      const out = pts.map(p => ({ ...p, x: -p.x }));
+      for (const name of Object.keys(LM)) {
+        const other = mirrorJoint(name);
+        if (other !== name) out[LM[other]] = { ...pts[LM[name]], x: -pts[LM[name]].x };
+      }
+      return out;
+    };
+    const angles = computeAngles(flip(v.world), v.image, 1280, 720);
+    const [written, mirrored] = sidesOf(YOGA_POSES[key]);
+
+    const asWritten = matchSinglePose(angles, written.angles, { weights: written.weights });
+    const asMirrored = matchSinglePose(angles, mirrored.angles, { weights: mirrored.weights });
+
+    assertEqual(asMirrored.score, 100, `${key}: the mirror is a perfect match`);
+    assert(asWritten.score < 80,
+      `${key}: the written side should not accept it, scored ${asWritten.score.toFixed(1)}`);
+  }
+});
+
+suite("side selection");
+
+const cand = (a, b) => [{ key: "written", score: a }, { key: "mirrored", score: b }];
+
+test("the first frame simply takes the better side", () => {
+  assertEqual(new SideSelector().pick(cand(40, 90), 0), "mirrored");
+});
+
+test("a side has to win by a margin, and hold it, before it takes over", () => {
+  const sel = new SideSelector({ margin: 8, holdMs: 700 });
+  assertEqual(sel.pick(cand(90, 40), 0), "written");
+  assertEqual(sel.pick(cand(80, 85), 100), "written", "five points is not a margin");
+  assertEqual(sel.pick(cand(40, 90), 200), "written", "a clear lead, but only just arrived");
+  assertEqual(sel.pick(cand(40, 90), 800), "written", "still inside the hold");
+  assertEqual(sel.pick(cand(40, 90), 901), "mirrored", "held long enough");
+});
+
+test("a challenge that lapses does not accumulate", () => {
+  // Coming up out of one side and down into the other passes through a moment
+  // where the wrong side leads. That must not count toward a switch.
+  const sel = new SideSelector({ margin: 8, holdMs: 700 });
+  sel.pick(cand(90, 40), 0);
+  sel.pick(cand(40, 90), 100);           // challenger appears
+  sel.pick(cand(90, 40), 300);           // and loses its lead again
+  assertEqual(sel.pick(cand(40, 90), 700), "written", "the clock restarted");
+  assertEqual(sel.pick(cand(40, 90), 1000), "written", "still counting from 300ms");
+  assertEqual(sel.pick(cand(40, 90), 1500), "mirrored");
+});
+
+test("scores rattling within the margin never switch sides", () => {
+  const sel = new SideSelector();
+  assertEqual(sel.pick(cand(70, 60), 0), "written");
+  for (let t = 1; t < 200; t++) {
+    const jitter = (t % 2) ? 6 : -6;
+    assertEqual(sel.pick(cand(70, 70 + jitter), t * 33), "written", `frame ${t}`);
+  }
+});
+
+test("resetting forgets the side", () => {
+  const sel = new SideSelector();
+  sel.pick(cand(90, 40), 0);
+  sel.reset();
+  assertEqual(sel.pick(cand(40, 90), 1), "mirrored", "a new session picks afresh");
 });

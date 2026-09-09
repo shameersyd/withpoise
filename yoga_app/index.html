@@ -627,12 +627,29 @@
 import {
   LM, SKELETON, computeAngles, reliableLandmarks, matchSinglePose, correctionsFor,
   bodyFrame, jointMeasurability, TURN_LIMIT_DEGREES, VerdictLatch,
+  sidesOf, SideSelector,
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 
-const REFERENCE = {};
-for (const [key, pose] of Object.entries(YOGA_POSES)) REFERENCE[key] = buildReference(pose.rig);
+// Every pose, both ways round. An asymmetric pose is written for one side and
+// its mirror is derived, so there is one definition to keep correct rather than
+// two that can drift apart. Each side carries its own reference figure, since
+// the demo, the target outline and the scoring all have to be the same shape.
+const VARIANTS = {};
+for (const [key, pose] of Object.entries(YOGA_POSES)) {
+  VARIANTS[key] = sidesOf(pose).map((p) => ({ pose: p, reference: buildReference(p.rig) }));
+}
+const primary = (key) => VARIANTS[key][0];
+
+// Which side the user is currently doing, and the figure that goes with it.
+// Set every live frame; the guide screens read it so the walkthrough you open
+// mid-pose describes the side you are actually in.
+let currentVariant = null;
+const sideSelector = new SideSelector();
+
+const sidedName = (pose) =>
+  pose.symmetric ? pose.name : `${pose.name} · ${pose.side} side`;
 
 const BODY_PARTS = {
   torso:     [["left_shoulder","right_shoulder"],["left_shoulder","left_hip"],
@@ -1031,11 +1048,11 @@ function fitCanvas(canvas) {
  * body's left limb appears on the viewer's left, matching the flipped
  * self-view on the tracking screen.
  */
-function drawDemo(canvas, key, focus, bob = 0) {
+function drawDemo(canvas, variant, focus, bob = 0) {
   const surface = fitCanvas(canvas);
   if (!surface) return;
   const { ctx: c, w, h } = surface;
-  const ref = REFERENCE[key];
+  const ref = variant.reference;
   const tf = fitFigure(ref, w, h, Math.min(w, h) * 0.1);
 
   c.save();
@@ -1077,7 +1094,7 @@ function startDemoLoop() {
     if (ts - demoStepStart > STEP_MS) setDemoStep(demoStep + 1);
     const pose = YOGA_POSES[selectedPoseKey];
     const bob = Math.sin(ts / 1100) * 3;
-    drawDemo(guideCanvas, selectedPoseKey, focusSet(pose.steps[demoStep].focus), bob);
+    drawDemo(guideCanvas, primary(selectedPoseKey), focusSet(pose.steps[demoStep].focus), bob);
   };
   demoRAF = requestAnimationFrame(tick);
 }
@@ -1101,7 +1118,12 @@ function showGuide(key) {
     el.addEventListener("click", () => setDemoStep(idx)));
 
   const tipsEl = document.getElementById("guide-tips");
-  tipsEl.innerHTML = pose.tips.map(tip =>
+  const tips = pose.symmetric ? pose.tips : [
+    ...pose.tips,
+    { icon: "🔁", text: "Either side — the tracker follows whichever you do, "
+                      + "so work through both" },
+  ];
+  tipsEl.innerHTML = tips.map(tip =>
     `<div class="guide-tip">
       <span class="tip-icon">${tip.icon}</span>
       <span>${tip.text}</span>
@@ -1273,6 +1295,8 @@ function resetTrackPhase() {
   latestResult = null;
   resetBodyLengths();
   verdicts.reset();
+  sideSelector.reset();
+  currentVariant = null;
   if (poseWorker && workerReady) poseWorker.postMessage({ type: "reset" });
   overlayState = "";
   trackOverlay.classList.remove("hidden", "fading");
@@ -1356,11 +1380,11 @@ function ghostSegColor(jointResults, reliable) {
  * The target pose in canvas pixels: built from the user's own limb lengths and
  * pinned to their hips. Shared by the outline and the correction arrows.
  */
-function buildTargetFigure(key, landmarks, w, h) {
+function buildTargetFigure(variant, landmarks, w, h) {
   const len = measureBody(landmarks, w, h);
   if (!len) return null;
 
-  const figure = buildReference(YOGA_POSES[key].rig, len);
+  const figure = buildReference(variant.pose.rig, len);
   const hipPx = {
     x: (landmarks[LM.left_hip].x + landmarks[LM.right_hip].x) / 2 * w,
     y: (landmarks[LM.left_hip].y + landmarks[LM.right_hip].y) / 2 * h,
@@ -1376,15 +1400,15 @@ function buildTargetFigure(key, landmarks, w, h) {
   return placed;
 }
 
-function drawGhost(ctx, key, w, h, landmarks, jointResults, targetPx, reliable) {
+function drawGhost(ctx, variant, w, h, landmarks, jointResults, targetPx, reliable) {
   let figure, tf;
 
   if (landmarks) {
-    figure = targetPx || buildTargetFigure(key, landmarks, w, h);
+    figure = targetPx || buildTargetFigure(variant, landmarks, w, h);
     if (!figure) return;
     tf = { map: p => p, scale: 1 };   // already in canvas pixels
   } else {
-    figure = REFERENCE[key];
+    figure = variant.reference;
     tf = fitFigure(figure, w, h, Math.min(w, h) * 0.1);
   }
 
@@ -1425,11 +1449,13 @@ btnGhost.addEventListener("click", () => {
 
 // ── In-session recap: the same walkthrough, without leaving the camera ──
 document.getElementById("btn-how-to").addEventListener("click", () => {
-  const pose = YOGA_POSES[selectedPoseKey];
-  document.getElementById("sheet-title").textContent = `${pose.emoji}  ${pose.name}`;
+  const variant = currentVariant || primary(selectedPoseKey);
+  const pose = variant.pose;
+  document.getElementById("sheet-title").textContent = `${pose.emoji}  ${sidedName(pose)}`;
   document.getElementById("sheet-steps").innerHTML = renderSteps(pose);
   stepsSheet.classList.add("visible");
-  requestAnimationFrame(() => drawDemo(document.getElementById("sheet-canvas"), selectedPoseKey, null));
+  requestAnimationFrame(() =>
+    drawDemo(document.getElementById("sheet-canvas"), variant, null));
 });
 
 document.getElementById("btn-resume").addEventListener("click", () => {
@@ -1469,7 +1495,7 @@ function startTrackingLoop() {
     if (trackPhase === "loading") {
       setOverlay(`loading-${modelStatus.message}`, "Getting the model ready",
                  modelStatus.message || "Loading…");
-      if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
+      if (ghostOn) drawGhost(ctx, primary(selectedPoseKey), w, h, null, null);
       return;
     }
 
@@ -1501,7 +1527,10 @@ function startTrackingLoop() {
         }
       }
 
-      if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, landmarks, null, null, reliable);
+      // Before the countdown ends there is no verdict yet, so the outline shows
+      // the side as written. Which side you are doing is only knowable once you
+      // are in the pose.
+      if (ghostOn) drawGhost(ctx, primary(selectedPoseKey), w, h, landmarks, null, null, reliable);
       if (landmarks && trackPhase !== "live") {
         // dimmed skeleton — no corrections until tracking actually starts
         ctx.globalAlpha = 0.35;
@@ -1521,8 +1550,21 @@ function startTrackingLoop() {
       const frame = world ? bodyFrame(world) : null;
       const measurability = world ? jointMeasurability(world) : null;
 
-      const match = matchSinglePose(angles, pose.angles,
-        { reliable, measurability, weights: pose.weights });
+      // Score every side of the pose and keep the one the body is closest to.
+      // A user doing the second half of their practice used to be scored
+      // against the first half's shape — every leg and hip joint wrong, and
+      // corrections telling them to undo a correct pose.
+      const scored = VARIANTS[selectedPoseKey].map((variant, i) => ({
+        key: i,
+        variant,
+        match: matchSinglePose(angles, variant.pose.angles,
+          { reliable, measurability, weights: variant.pose.weights }),
+      }));
+      const chosen = scored[sideSelector.pick(
+        scored.map(c => ({ key: c.key, score: c.match.score })), timestamp)];
+
+      currentVariant = chosen.variant;
+      const match = chosen.match;
       match.turnDegrees = frame ? frame.turnDegrees : 0;
 
       // Colours and corrections run off the latched verdicts, not the raw
@@ -1537,14 +1579,14 @@ function startTrackingLoop() {
       const judged = new Set(reliable);
       for (const joint of match.uncertain) judged.delete(joint);
 
-      const target = buildTargetFigure(selectedPoseKey, landmarks, w, h);
+      const target = buildTargetFigure(chosen.variant, landmarks, w, h);
       if (ghostOn) {
-        drawGhost(ctx, selectedPoseKey, w, h, landmarks, shown, target, judged);
+        drawGhost(ctx, chosen.variant, w, h, landmarks, shown, target, judged);
       }
       drawSkeleton(ctx, landmarks, w, h, shown, target, judged);
-      updateTrackingUI(pose.name, match, shown, true);
+      updateTrackingUI(sidedName(chosen.variant.pose), match, shown, true);
     } else {
-      if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
+      if (ghostOn) drawGhost(ctx, currentVariant || primary(selectedPoseKey), w, h, null, null);
       updateTrackingUI("", null, null, false);
     }
   }

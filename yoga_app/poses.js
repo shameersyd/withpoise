@@ -6,6 +6,9 @@
  * elbow count for as much as a collapsed standing leg. Weights are relative
  * within a pose; only their ratios matter.
  *
+ * `symmetric: true` means the pose is the same on both sides. Everything else
+ * carries `side`, and its mirror is generated rather than written out twice.
+ *
  * Extracted from index.html so tests can import them. The schema is documented
  * where the fields are first used; Phase 4 of the improvement brief turns this
  * into a validated, declarative format.
@@ -27,6 +30,7 @@
 export const YOGA_POSES = {
   mountain: {
     name: "Mountain Pose",
+    symmetric: true,
     sanskrit: "Tadasana",
     emoji: "🏔️",
     description: "The foundation of all standing poses — builds awareness of posture and balance.",
@@ -68,6 +72,10 @@ export const YOGA_POSES = {
   },
   warrior1: {
     name: "Warrior I",
+    // Written for one side; the other is derived by mirrorPose(). For the
+    // Warriors and Triangle this is the front/lower limb, for Tree the
+    // standing leg — it is a label for which mirror this is, not anatomy.
+    side: "left",
     sanskrit: "Virabhadrasana I",
     emoji: "⚔️",
     description: "A powerful standing pose that strengthens legs and opens the chest.",
@@ -109,6 +117,10 @@ export const YOGA_POSES = {
   },
   warrior2: {
     name: "Warrior II",
+    // Written for one side; the other is derived by mirrorPose(). For the
+    // Warriors and Triangle this is the front/lower limb, for Tree the
+    // standing leg — it is a label for which mirror this is, not anatomy.
+    side: "left",
     sanskrit: "Virabhadrasana II",
     emoji: "🗡️",
     description: "Builds stamina and focus while stretching the hips and shoulders.",
@@ -150,6 +162,10 @@ export const YOGA_POSES = {
   },
   tree: {
     name: "Tree Pose",
+    // Written for one side; the other is derived by mirrorPose(). For the
+    // Warriors and Triangle this is the front/lower limb, for Tree the
+    // standing leg — it is a label for which mirror this is, not anatomy.
+    side: "left",
     sanskrit: "Vrksasana",
     emoji: "🌳",
     description: "A balancing pose that improves focus and strengthens the standing leg.",
@@ -191,6 +207,10 @@ export const YOGA_POSES = {
   },
   triangle: {
     name: "Triangle Pose",
+    // Written for one side; the other is derived by mirrorPose(). For the
+    // Warriors and Triangle this is the front/lower limb, for Tree the
+    // standing leg — it is a label for which mirror this is, not anatomy.
+    side: "left",
     sanskrit: "Trikonasana",
     emoji: "🔺",
     description: "A deep stretch for the hamstrings, hips, and spine.",

@@ -403,6 +403,148 @@ export function correctionsFor(jointResults, tips) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Sides
+//
+// Warrior I, Warrior II, Triangle and Tree are asymmetric, and each is written
+// out for one side only. A user doing the second half of their practice was
+// being scored against the first half's shape: every leg and hip joint wrong,
+// corrections telling them to undo a correct pose.
+//
+// Rather than write each pose twice — two copies to keep in step, and the
+// mirror of a pose is not a judgement call — the other side is derived.
+// ─────────────────────────────────────────────────────────────
+
+/** left_knee ⇄ right_knee; anything unsided is left alone. */
+export function mirrorJoint(name) {
+  if (name.startsWith("left_")) return `right_${name.slice(5)}`;
+  if (name.startsWith("right_")) return `left_${name.slice(6)}`;
+  return name;
+}
+
+const mirrorKeys = (obj) =>
+  obj && Object.fromEntries(Object.entries(obj).map(([k, v]) => [mirrorJoint(k), v]));
+
+/**
+ * Reflect a rig direction across the body's sagittal plane.
+ *
+ * dirVec is (cos θ cos φ, −sin θ cos φ, sin φ), so flipping x is θ → 180 − θ
+ * with φ untouched: the segment keeps its height and its depth and swaps sides.
+ * A vertical torso at 90° stays at 90°, which is the sanity check.
+ */
+export function mirrorDirection(entry) {
+  if (Array.isArray(entry)) return [180 - entry[0], entry[1] ?? 0];
+  return 180 - entry;
+}
+
+const mirrorLimb = (pair) => pair.map(mirrorDirection);
+
+export function mirrorRig(rig) {
+  return {
+    torso: mirrorDirection(rig.torso),
+    arm_left:  mirrorLimb(rig.arm_right),
+    arm_right: mirrorLimb(rig.arm_left),
+    leg_left:  mirrorLimb(rig.leg_right),
+    leg_right: mirrorLimb(rig.leg_left),
+  };
+}
+
+const SWAPS = { left: "right", right: "left", Left: "Right", Right: "Left",
+                LEFT: "RIGHT", RIGHT: "LEFT" };
+
+/**
+ * Swap the sides named in a sentence. Whole words only, so "left" inside
+ * another word is safe, and case is preserved so a sentence still reads.
+ */
+export function mirrorText(text) {
+  return text.replace(/\b(left|right|Left|Right|LEFT|RIGHT)\b/g, (w) => SWAPS[w]);
+}
+
+const mirrorPart = (part) =>
+  part.startsWith("left_") ? `right_${part.slice(5)}`
+  : part.startsWith("right_") ? `left_${part.slice(6)}`
+  : part;
+
+/**
+ * The same pose, other side. Everything sided moves: the rig, the joint
+ * targets, the weights, the body parts each instruction highlights, and the
+ * words "left" and "right" in the instructions themselves.
+ */
+export function mirrorPose(pose) {
+  return {
+    ...pose,
+    // A pose with no side (a symmetric one) keeps none: mirroring it is a
+    // no-op and inventing a label for the result would be a lie.
+    side: pose.side === "left" ? "right" : pose.side === "right" ? "left" : pose.side,
+    rig: mirrorRig(pose.rig),
+    angles: mirrorKeys(pose.angles),
+    weights: mirrorKeys(pose.weights),
+    steps: pose.steps.map((step) => ({
+      ...step,
+      text: mirrorText(step.text),
+      focus: (step.focus || []).map(mirrorPart),
+    })),
+    tips: pose.tips.map((tip) => ({ ...tip, text: mirrorText(tip.text) })),
+  };
+}
+
+/**
+ * Every side of a pose, the written one first. A symmetric pose has one.
+ */
+export function sidesOf(pose) {
+  return pose.symmetric ? [pose] : [pose, mirrorPose(pose)];
+}
+
+/**
+ * Which side the user is actually doing.
+ *
+ * Scoring both and taking the better one is right but not stable: mid-way into
+ * a pose the two are within a point of each other and the choice rattles
+ * between them, taking the outline and the spoken corrections with it. So a
+ * side has to win by a margin and hold it for a beat before it takes over, and
+ * the incumbent keeps the pose until then.
+ */
+export class SideSelector {
+  constructor({ margin = 8, holdMs = 700 } = {}) {
+    this.margin = margin;
+    this.holdMs = holdMs;
+    this.reset();
+  }
+
+  reset() {
+    this.current = null;
+    this.challenger = null;
+    this.challengerSince = 0;
+  }
+
+  /** candidates: [{ key, score }]. Returns the winning key. */
+  pick(candidates, now) {
+    if (!candidates.length) return null;
+    const best = candidates.reduce((a, b) => (b.score > a.score ? b : a));
+
+    if (this.current === null || !candidates.some(c => c.key === this.current)) {
+      this.current = best.key;
+      this.challenger = null;
+      return this.current;
+    }
+
+    const held = candidates.find(c => c.key === this.current);
+    if (best.key === this.current || best.score <= held.score + this.margin) {
+      this.challenger = null;
+      return this.current;
+    }
+
+    if (this.challenger !== best.key) {
+      this.challenger = best.key;
+      this.challengerSince = now;
+    } else if (now - this.challengerSince >= this.holdMs) {
+      this.current = best.key;
+      this.challenger = null;
+    }
+    return this.current;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Reference Figure — builds a skeleton from a pose rig
 // ─────────────────────────────────────────────────────────────
 export const SEG_DEFAULT = {
