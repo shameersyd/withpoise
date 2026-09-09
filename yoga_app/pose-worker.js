@@ -15,6 +15,38 @@
  * low-confidence to trust and the smoothed history was substituted instead.
  */
 
+// ─────────────────────────────────────────────────────────────
+// importScripts, for a worker that does not have one
+//
+// This is a module worker, and module workers have no importScripts(). But
+// MediaPipe's wasm loader calls it — the ES bundle is a module, the WebAssembly
+// glue it pulls in at runtime is a classic script — so createFromOptions() died
+// with "Module scripts don't support importScripts()" and the landmarker never
+// came up at all.
+//
+// Synchronous XHR is the one way to fetch a script synchronously, and unlike on
+// the main thread it is entirely legitimate in a worker. Indirect eval puts the
+// result in global scope, which is where importScripts would have put it.
+// ─────────────────────────────────────────────────────────────
+// It is not missing — it is present and throws, so the feature test has to
+// call it. With no arguments a working importScripts does nothing at all.
+let importScriptsWorks = true;
+try { self.importScripts(); } catch { importScriptsWorks = false; }
+
+if (!importScriptsWorks) {
+  self.importScripts = (...urls) => {
+    for (const url of urls) {
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", url, false);
+      xhr.send(null);
+      if (xhr.status && xhr.status >= 400) {
+        throw new Error(`Could not load ${url} (${xhr.status})`);
+      }
+      (0, eval)(xhr.responseText);
+    }
+  };
+}
+
 import {
   PoseLandmarker,
   FilesetResolver,
