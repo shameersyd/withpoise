@@ -61,6 +61,43 @@
     }
     .loader-text .status { color: var(--cyan); font-weight: 500; }
 
+    /* ── First-run safety notice ── */
+    #safety {
+      position: fixed; inset: 0; z-index: 60;
+      display: none; align-items: center; justify-content: center;
+      padding: 24px;
+      background: rgba(6, 6, 16, 0.88);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    #safety.visible { display: flex; }
+    .safety-card {
+      max-width: 420px; width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-glass);
+      border-radius: 18px;
+      padding: 26px 24px 22px;
+    }
+    .safety-card h2 { font-size: 19px; font-weight: 700; margin-bottom: 14px; }
+    .safety-card p {
+      font-size: 14.5px; line-height: 1.6;
+      color: var(--text-secondary); margin-bottom: 12px;
+    }
+    .safety-card p strong { color: var(--text-primary); font-weight: 600; }
+    .btn-safety {
+      display: block; width: 100%; margin-top: 18px;
+      padding: 15px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, var(--cyan), #0091ea);
+      color: #fff; font-family: var(--font);
+      font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+    .btn-safety:active { transform: scale(0.98); opacity: 0.9; }
+
+    .select-footnote {
+      font-size: 12px; line-height: 1.55;
+      color: rgba(240, 240, 245, 0.38);
+      text-align: center; padding: 4px 8px 28px;
+    }
+
     /* Shown instead of the app when a pose definition is malformed. Loud on
        purpose: the alternative is scoring somebody against a broken shape. */
     .fatal {
@@ -626,7 +663,23 @@
     <p>Choose a pose to practice</p>
   </div>
   <div class="pose-grid" id="pose-grid"></div>
+  <p class="select-footnote">
+    Feedback on shape only — not a substitute for a teacher. Stop if it hurts.
+  </p>
 </div>
+<div id="safety">
+  <div class="safety-card">
+    <h2>Before you start</h2>
+    <p>This app watches the shape you make and tells you how it differs from a
+       target. That is all it does — it can't see pain, and it knows nothing
+       about your body, your injuries or your day.</p>
+    <p><strong>It is not a teacher.</strong> Work inside what feels easy, come
+       out of anything that hurts, and get a real teacher's eyes on you if you
+       can.</p>
+    <button class="btn-safety" id="btn-safety-ok">Got it</button>
+  </div>
+</div>
+
 <div id="session-bar">
   <span id="session-count"></span>
   <button id="btn-session-start">Start session →</button>
@@ -2293,7 +2346,28 @@ document.querySelectorAll("[data-model-seg] button").forEach(btn => {
 // ─────────────────────────────────────────────────────────────
 const loadStatus = document.getElementById("load-status");
 
+// ─────────────────────────────────────────────────────────────
+// First-run safety notice
+//
+// The app tells people how to move their spine, so it says once, plainly, what
+// it can and cannot see. Shown until it has been acknowledged; if localStorage
+// is unavailable it simply shows every time, which is the right way round to
+// fail.
+// ─────────────────────────────────────────────────────────────
+const SAFETY_KEY = "yoga.safety";
+const safetyPanel = document.getElementById("safety");
+
+function safetyAcknowledged() {
+  try { return localStorage.getItem(SAFETY_KEY) === "seen"; } catch { return false; }
+}
+
+document.getElementById("btn-safety-ok").addEventListener("click", () => {
+  try { localStorage.setItem(SAFETY_KEY, "seen"); } catch { /* shown again next time */ }
+  safetyPanel.classList.remove("visible");
+});
+
 function init() {
+  if (!safetyAcknowledged()) safetyPanel.classList.add("visible");
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
