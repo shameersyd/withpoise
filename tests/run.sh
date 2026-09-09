@@ -11,4 +11,10 @@ if [ ! -x "$JSC" ]; then
   echo "jsc not found at $JSC — it ships with macOS inside the JavaScriptCore framework." >&2
   exit 127
 fi
-exec "$JSC" -m tests/run.js
+"$JSC" -m tests/run.js
+
+# The suite above never loads MediaPipe, never creates a Worker and never
+# touches WebGL, so it cannot see whether pose detection actually runs — and
+# for the app's whole history it did not, while this stayed green.
+echo "  For what this cannot see, run ./tests/smoke.sh (Chrome + network, ~1 min)."
+echo
