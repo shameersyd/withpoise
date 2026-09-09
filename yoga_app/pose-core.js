@@ -61,7 +61,13 @@ export function calcAngle(a, b, c) {
   const dot = ba[0]*bc[0] + ba[1]*bc[1] + ba[2]*bc[2];
   const magBA = Math.sqrt(ba[0]**2 + ba[1]**2 + ba[2]**2);
   const magBC = Math.sqrt(bc[0]**2 + bc[1]**2 + bc[2]**2);
-  let cosAngle = dot / (magBA * magBC + 1e-6);
+  // Floor the divisor rather than padding it: adding an epsilon to the product
+  // shrinks every cosine slightly, and by an amount that depends on how long
+  // the limbs are, so a straight limb read 179.9° in pixels and 179.7° in
+  // metres. Against targets that are mostly 175° that is a standing bias
+  // toward "slightly bent". A floor leaves real magnitudes untouched and still
+  // yields the same 90° for a degenerate zero-length segment.
+  let cosAngle = dot / Math.max(magBA * magBC, 1e-12);
   cosAngle = Math.max(-1, Math.min(1, cosAngle));
   return Math.acos(cosAngle) * (180 / Math.PI);
 }
