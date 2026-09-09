@@ -190,6 +190,12 @@ export function matchSinglePose(angles, template, opts = {}) {
 
   for (const [joint, [target, tolerance]] of Object.entries(template)) {
     if (!(joint in angles)) continue;
+
+    // A weight of zero is a pose saying "this joint is not part of me". It is
+    // then not scored, not counted in coverage, not coloured on the outline and
+    // never corrected — anything less than all of those and the user is still
+    // being told to move a joint the pose does not care about.
+    if (weightOf(joint) === 0) continue;
     totalWeight += weightOf(joint);
 
     if (reliable) {

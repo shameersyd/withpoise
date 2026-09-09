@@ -764,3 +764,21 @@ test("the runtime cache is versioned apart from the app shell", () => {
   assert(version(app[1]) !== version(runtime[1]),
     `both caches are at ${version(app[1])}, so bumping the app evicts the model`);
 });
+
+test("a joint weighted zero is left out of the pose entirely", () => {
+  // Not just left out of the average: a joint the pose does not care about must
+  // not colour the outline red or produce an instruction either.
+  const template = { left_knee: [175, 20], left_elbow: [175, 20] };
+  const angles = { left_knee: 175, left_elbow: 90 };   // elbow wildly wrong
+
+  const counted = matchSinglePose(angles, template, { weights: { left_elbow: 1 } });
+  assertEqual(counted.score, 50, "with a weight it drags the score down");
+  assertEqual(counted.scored, 2);
+
+  const ignored = matchSinglePose(angles, template, { weights: { left_elbow: 0 } });
+  assertEqual(ignored.score, 100, "without one it is not scored");
+  assertEqual(ignored.scored, 1, "nor counted");
+  assertEqual(ignored.coverage, 1, "nor missed from coverage");
+  assert(!("left_elbow" in ignored.results), "nor available to be corrected");
+  assertDeepEqual(correctionsFor(ignored.results, CORRECTION_TIPS), []);
+});
