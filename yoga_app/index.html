@@ -625,7 +625,7 @@
 // what lets tests/ import and pin them. This file keeps the DOM, the canvas and
 // the session state.
 import {
-  LM, SKELETON, computeAngles, reliableLandmarks, matchSinglePose,
+  LM, SKELETON, computeAngles, reliableLandmarks, matchSinglePose, correctionsFor,
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
@@ -903,18 +903,12 @@ function updateTrackingUI(poseName, match, detected) {
 
   perfectGlow.classList.toggle("visible", score >= 95 && hidden === 0);
 
-  const corrections = [];
-  for (const [joint, res] of Object.entries(jointResults)) {
-    if (!res.ok) {
-      const tips = CORRECTION_TIPS[joint];
-      if (tips) corrections.push(res.direction < 0 ? tips[0] : tips[1]);
-    }
-  }
+  const corrections = correctionsFor(jointResults, CORRECTION_TIPS);
 
   if (corrections.length > 0) {
     correctionsPanel.classList.add("visible");
-    correctionsList.innerHTML = corrections.slice(0, 5).map(tip =>
-      `<div class="correction-item"><span class="correction-dot"></span>${tip}</div>`
+    correctionsList.innerHTML = corrections.slice(0, 5).map(c =>
+      `<div class="correction-item"><span class="correction-dot"></span>${c.text}</div>`
     ).join("");
   } else {
     correctionsPanel.classList.remove("visible");

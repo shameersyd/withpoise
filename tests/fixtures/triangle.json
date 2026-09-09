@@ -1,0 +1,1631 @@
+{
+  "pose": "triangle",
+  "name": "Triangle Pose",
+  "generated": "synthetic — tests/make-fixtures.js; see the header there",
+  "variants": {
+    "correct": {
+      "note": "The rig held exactly. Every joint should sit on its target.",
+      "image": [
+        {
+          "x": 0.81128,
+          "y": 0.40204,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.74739,
+          "y": 0.52002,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.67856,
+          "y": 0.42172,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.82483,
+          "y": 0.6306,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.60113,
+          "y": 0.31114,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.9116,
+          "y": 0.73402,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.51436,
+          "y": 0.20772,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.52868,
+          "y": 0.66096,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.47132,
+          "y": 0.57904,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.62868,
+          "y": 0.83416,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.37132,
+          "y": 0.75225,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.74339,
+          "y": 0.99799,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.2868,
+          "y": 0.93351,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ],
+      "world": [
+        {
+          "x": 0.59143,
+          "y": -0.41412,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.47005,
+          "y": -0.18996,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.33927,
+          "y": -0.37673,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.61717,
+          "y": 0.02015,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.19215,
+          "y": -0.58684,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.78205,
+          "y": 0.21664,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.02728,
+          "y": -0.78333,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.05449,
+          "y": 0.07782,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.05449,
+          "y": -0.07782,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.24449,
+          "y": 0.40691,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.24449,
+          "y": 0.25127,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.46245,
+          "y": 0.71819,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.40508,
+          "y": 0.59567,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ]
+    },
+    "fault": {
+      "note": "Correct except the left shin, bent 45° away from its thigh.",
+      "fault": {
+        "joint": "left_knee",
+        "expectCorrection": "Straighten your left knee"
+      },
+      "image": [
+        {
+          "x": 0.81128,
+          "y": 0.40204,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.74739,
+          "y": 0.52002,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.67856,
+          "y": 0.42172,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.82483,
+          "y": 0.6306,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.60113,
+          "y": 0.31114,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.9116,
+          "y": 0.73402,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.51436,
+          "y": 0.20772,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.52868,
+          "y": 0.66096,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.47132,
+          "y": 0.57904,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.62868,
+          "y": 0.83416,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.37132,
+          "y": 0.75225,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.59395,
+          "y": 1.03112,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.2868,
+          "y": 0.93351,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ],
+      "world": [
+        {
+          "x": 0.59143,
+          "y": -0.41412,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.47005,
+          "y": -0.18996,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.33927,
+          "y": -0.37673,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.61717,
+          "y": 0.02015,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.19215,
+          "y": -0.58684,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.78205,
+          "y": 0.21664,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.02728,
+          "y": -0.78333,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.05449,
+          "y": 0.07782,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.05449,
+          "y": -0.07782,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.24449,
+          "y": 0.40691,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.24449,
+          "y": 0.25127,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.1785,
+          "y": 0.78114,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.40508,
+          "y": 0.59567,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ]
+    },
+    "edgeOn": {
+      "note": "Correct, but turned 80° off-axis with the depth axis compressed to 0.4× — a model of what a monocular landmarker loses on a body edge-on to the camera.",
+      "turnedDegrees": 80,
+      "depthCompression": 0.4,
+      "image": [
+        {
+          "x": 0.55405,
+          "y": 0.40204,
+          "z": -0.12262,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.54296,
+          "y": 0.52002,
+          "z": -0.09745,
+          "visibility": 1
+        },
+        {
+          "x": 0.53101,
+          "y": 0.42172,
+          "z": -0.07034,
+          "visibility": 1
+        },
+        {
+          "x": 0.55641,
+          "y": 0.6306,
+          "z": -0.12796,
+          "visibility": 1
+        },
+        {
+          "x": 0.51756,
+          "y": 0.31114,
+          "z": -0.03984,
+          "visibility": 1
+        },
+        {
+          "x": 0.57147,
+          "y": 0.73402,
+          "z": -0.16214,
+          "visibility": 1
+        },
+        {
+          "x": 0.50249,
+          "y": 0.20772,
+          "z": -0.00566,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.50498,
+          "y": 0.66096,
+          "z": -0.0113,
+          "visibility": 1
+        },
+        {
+          "x": 0.49502,
+          "y": 0.57904,
+          "z": 0.0113,
+          "visibility": 1
+        },
+        {
+          "x": 0.52234,
+          "y": 0.83416,
+          "z": -0.05069,
+          "visibility": 1
+        },
+        {
+          "x": 0.47766,
+          "y": 0.75225,
+          "z": 0.05069,
+          "visibility": 1
+        },
+        {
+          "x": 0.54226,
+          "y": 0.99799,
+          "z": -0.09588,
+          "visibility": 1
+        },
+        {
+          "x": 0.46298,
+          "y": 0.93351,
+          "z": 0.08399,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ],
+      "world": [
+        {
+          "x": 0.1027,
+          "y": -0.41412,
+          "z": -0.23298,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.08162,
+          "y": -0.18996,
+          "z": -0.18516,
+          "visibility": 1
+        },
+        {
+          "x": 0.05891,
+          "y": -0.37673,
+          "z": -0.13365,
+          "visibility": 1
+        },
+        {
+          "x": 0.10717,
+          "y": 0.02015,
+          "z": -0.24312,
+          "visibility": 1
+        },
+        {
+          "x": 0.03337,
+          "y": -0.58684,
+          "z": -0.07569,
+          "visibility": 1
+        },
+        {
+          "x": 0.1358,
+          "y": 0.21664,
+          "z": -0.30807,
+          "visibility": 1
+        },
+        {
+          "x": 0.00474,
+          "y": -0.78333,
+          "z": -0.01074,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.00946,
+          "y": 0.07782,
+          "z": -0.02146,
+          "visibility": 1
+        },
+        {
+          "x": -0.00946,
+          "y": -0.07782,
+          "z": 0.02146,
+          "visibility": 1
+        },
+        {
+          "x": 0.04246,
+          "y": 0.40691,
+          "z": -0.09631,
+          "visibility": 1
+        },
+        {
+          "x": -0.04246,
+          "y": 0.25127,
+          "z": 0.09631,
+          "visibility": 1
+        },
+        {
+          "x": 0.0803,
+          "y": 0.71819,
+          "z": -0.18217,
+          "visibility": 1
+        },
+        {
+          "x": -0.07034,
+          "y": 0.59567,
+          "z": 0.15957,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ]
+    },
+    "partial": {
+      "note": "Correct, but knees and ankles are below the frame and barely visible.",
+      "offFrame": [
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle"
+      ],
+      "image": [
+        {
+          "x": 0.81128,
+          "y": 0.40204,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.74739,
+          "y": 0.52002,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.67856,
+          "y": 0.42172,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.82483,
+          "y": 0.6306,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.60113,
+          "y": 0.31114,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.9116,
+          "y": 0.73402,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.51436,
+          "y": 0.20772,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.52868,
+          "y": 0.66096,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.47132,
+          "y": 0.57904,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.62868,
+          "y": 1.1,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": 0.37132,
+          "y": 1.1,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": 0.74339,
+          "y": 1.1,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": 0.2868,
+          "y": 1.1,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ],
+      "world": [
+        {
+          "x": 0.59143,
+          "y": -0.41412,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.47005,
+          "y": -0.18996,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.33927,
+          "y": -0.37673,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.61717,
+          "y": 0.02015,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.19215,
+          "y": -0.58684,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.78205,
+          "y": 0.21664,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.02728,
+          "y": -0.78333,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.05449,
+          "y": 0.07782,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": -0.05449,
+          "y": -0.07782,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0.24449,
+          "y": 0.40691,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": -0.24449,
+          "y": 0.25127,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": 0.46245,
+          "y": 0.71819,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": -0.40508,
+          "y": 0.59567,
+          "z": 0,
+          "visibility": 0.25
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ]
+    }
+  }
+}

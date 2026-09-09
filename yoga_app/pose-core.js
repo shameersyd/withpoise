@@ -165,6 +165,24 @@ export function matchSinglePose(angles, template, reliable) {
   return { score, results, unscored, scored: total };
 }
 
+/**
+ * The corrections a match implies, as physical instructions. Pure, and keyed by
+ * joint so a caller can throttle or prioritise them rather than just print them.
+ *
+ * `tips` maps a joint to [ too-small phrasing, too-large phrasing ]. A joint
+ * angle grows as the joint straightens, so the first string always fixes an
+ * over-bent joint.
+ */
+export function correctionsFor(jointResults, tips) {
+  const out = [];
+  for (const [joint, res] of Object.entries(jointResults)) {
+    if (res.ok) continue;
+    const phrasing = tips[joint];
+    if (phrasing) out.push({ joint, text: res.direction < 0 ? phrasing[0] : phrasing[1] });
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Reference Figure — builds a skeleton from a pose rig
 // ─────────────────────────────────────────────────────────────
