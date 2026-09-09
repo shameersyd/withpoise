@@ -703,6 +703,7 @@
     <div id="overlay-sub">Step back until your whole body — head to ankles — is visible.</div>
     <div id="load-progress"><div id="load-progress-fill"></div></div>
     <button class="btn-retry" data-model-retry>Try again</button>
+    <button class="btn-retry" id="btn-camera-retry">Try again</button>
   </div>
 
   <div id="steps-sheet">
@@ -1074,6 +1075,35 @@ function updateTrackingUI(poseName, match, shown, detected) {
 // ─────────────────────────────────────────────────────────────
 let facingMode = "user";
 let cameraStream = null;
+let cameraError = null;
+
+/**
+ * Why the camera did not open, in words that suggest a next move.
+ *
+ * getUserMedia has a small vocabulary of error names and they mean genuinely
+ * different things — a denied permission and an unplugged webcam need
+ * completely different responses from the user.
+ */
+function cameraProblem(err) {
+  const name = (err && err.name) || "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return {
+      title: "The camera is blocked",
+      detail: "Allow camera access for this page in your browser settings, "
+            + "then try again. Nothing you record leaves your device.",
+    };
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return { title: "No camera found",
+             detail: "This device has no camera the browser can use." };
+  }
+  if (name === "NotReadableError") {
+    return { title: "The camera is busy",
+             detail: "Another app is using it. Close that and try again." };
+  }
+  return { title: "The camera would not start",
+           detail: (err && err.message) || "Something went wrong opening it." };
+}
 
 async function startCamera() {
   try {
@@ -1085,9 +1115,11 @@ async function startCamera() {
     cameraStream = stream;
     video.srcObject = stream;
     await video.play();
+    cameraError = null;
   } catch (err) {
-    alert("Camera access denied. Please allow camera permissions and reload.");
-    console.error(err);
+    // An alert() used to sit here. It blocked the page, said the same thing
+    // whatever had gone wrong, and left no way back except a reload.
+    cameraError = cameraProblem(err);
   }
 }
 
@@ -1913,6 +1945,15 @@ function startTrackingLoop() {
     if (!isTracking) return;
     animFrameId = requestAnimationFrame(renderFrame);
 
+    // Before the readyState check: with no camera there will never be a frame,
+    // so anything that waits for one waits forever and says nothing.
+    if (cameraError) {
+      setOverlay("camera-error", cameraError.title, cameraError.detail);
+      cameraRetry.classList.add("visible");
+      return;
+    }
+    cameraRetry.classList.remove("visible");
+
     if (video.readyState < 2) return;
 
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -2103,6 +2144,13 @@ const MODEL_NOTES = {
   full: "Faster, lighter download (9 MB). Good on most phones.",
   heavy: "More accurate landmarks, noticeably slower (29 MB).",
 };
+
+const cameraRetry = document.getElementById("btn-camera-retry");
+cameraRetry.addEventListener("click", async () => {
+  cameraError = null;
+  cameraRetry.classList.remove("visible");
+  await startCamera();
+});
 
 const loadProgress = document.getElementById("load-progress");
 const loadProgressFill = document.getElementById("load-progress-fill");
