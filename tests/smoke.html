@@ -1,0 +1,86 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pose worker smoke test</title>
+<!--
+  Drives the real worker against the real MediaPipe runtime in a real browser.
+
+  The jsc suite cannot see any of this. It never loads MediaPipe, never creates
+  a Worker, and never touches WebGL — so it was entirely happy while the
+  landmarker failed to start on every single run for the app's whole history.
+  Everything asserted here is something that suite is blind to by construction.
+
+  Run with tests/smoke.sh. Results go back through a fetch the server logs,
+  because there is no other way out of a headless page.
+-->
+<body>
+<script type="module">
+const log = [];
+const fail = [];
+let reported = false;
+
+function report(verdict) {
+  if (reported) return;
+  reported = true;
+  fetch("/__smoke?" + encodeURIComponent(
+    `${verdict}||${fail.join("; ") || "-"}||${log.join(" ~~ ")}`.slice(0, 900)));
+}
+
+const worker = new Worker("/yoga_app/pose-worker.js", { type: "module" });
+let frames = 0;
+let delegate = null;
+
+worker.onerror = (e) => {
+  fail.push(`worker failed to start: ${e.message}`);
+  report("FAIL");
+};
+
+worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === "status") {
+    if (m.state === "error") {
+      fail.push(`status error: ${m.message}`);
+      log.push("status=error");
+      report("FAIL");
+      return;
+    }
+    if (m.state === "ready") {
+      delegate = m.delegate;
+      log.push(`ready on ${m.delegate}`);
+      sendFrame();
+    }
+  } else if (m.type === "result") {
+    frames++;
+    if (typeof m.inference !== "number" || !(m.inference >= 0)) {
+      fail.push(`frame ${frames} reported no inference time`);
+    }
+    log.push(`frame${frames} detected=${m.detected} ${Math.round(m.inference)}ms`);
+    if (frames < 3) sendFrame();
+    else finish();
+  }
+};
+
+function finish() {
+  if (!delegate) fail.push("never reported a delegate");
+  if (frames < 3) fail.push(`only ${frames} of 3 frames came back`);
+  report(fail.length ? "FAIL" : "OK");
+}
+
+async function sendFrame() {
+  // Not a person, so detection is expected to find nothing. What is being
+  // tested is that inference runs at all and answers every frame.
+  const canvas = new OffscreenCanvas(640, 480);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#8a8a8a"; ctx.fillRect(0, 0, 640, 480);
+  ctx.fillStyle = "#303030"; ctx.fillRect(285, 90, 70, 300);
+  const bitmap = await createImageBitmap(canvas);
+  worker.postMessage({ type: "frame", bitmap, timestamp: performance.now() }, [bitmap]);
+}
+
+worker.postMessage({ type: "init", model: "full" });
+
+setTimeout(() => {
+  fail.push(`timed out after ${frames} frames, delegate=${delegate || "none"}`);
+  report("FAIL");
+}, 60000);
+</script>
+</body>
