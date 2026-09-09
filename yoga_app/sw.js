@@ -1,6 +1,7 @@
 const CACHE_NAME = "yoga-pose-v3";
 const RUNTIME_CACHE = "yoga-pose-runtime-v3";
-const ASSETS = ["/", "/index.html", "/manifest.json", "/pose-worker.js"];
+const ASSETS = ["/", "/index.html", "/manifest.json",
+                "/pose-core.js", "/poses.js", "/pose-worker.js"];
 
 // The MediaPipe runtime and the model files are large, immutable and versioned
 // in their URLs — worth keeping once fetched, so a second visit starts offline
@@ -61,12 +62,15 @@ self.addEventListener("fetch", (e) => {
 
   if (url.origin !== self.location.origin) return;   // let anything else through
 
-  // index.html and the worker are the two files that actually change.
+  // Anything we wrote is under active development and must not be served from
+  // a stale cache. Matching on destination rather than on a list of filenames,
+  // because the last list silently stopped covering the app when the scoring
+  // core was split into its own modules.
   const isAppCode =
     e.request.mode === "navigate" ||
     e.request.destination === "document" ||
-    url.pathname.endsWith("index.html") ||
-    url.pathname.endsWith("pose-worker.js");
+    e.request.destination === "script" ||
+    e.request.destination === "worker";
 
   e.respondWith(isAppCode ? networkFirst(e.request) : cacheFirst(e.request, CACHE_NAME));
 });
