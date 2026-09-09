@@ -436,7 +436,8 @@ export function mirrorDirection(entry) {
   return 180 - entry;
 }
 
-const mirrorLimb = (pair) => pair.map(mirrorDirection);
+const mirrorLimb = (limb) => Object.fromEntries(
+  Object.entries(limb).map(([segment, direction]) => [segment, mirrorDirection(direction)]));
 
 export function mirrorRig(rig) {
   return {
@@ -553,10 +554,17 @@ export const SEG_DEFAULT = {
 };
 
 /**
- * A rig entry is `theta`, or `[theta, phi]` to tilt the segment out of the
- * frontal plane (+phi = away from the camera). Drawing simply drops z, so the
- * demo figure shows the foreshortening the camera would see, while the joint
- * angles stay three-dimensional.
+ * A direction is `theta`, or `[theta, phi]` to tilt the segment out of the
+ * frontal plane (+phi = away from the camera). Theta is degrees in the image
+ * plane, 0° pointing right and 90° up.
+ *
+ * An array here always means [theta, phi] — it used to mean that at the torso
+ * and "the two segments of this limb" inside a limb, which is why no limb could
+ * express a phi at all and why every pose in the file was planar. Limbs are now
+ * objects with named segments.
+ *
+ * Drawing simply drops z, so the demo figure shows the foreshortening the
+ * camera would see, while the joint angles stay three-dimensional.
  */
 export function dirVec(entry) {
   const theta = Array.isArray(entry) ? entry[0] : entry;
@@ -581,6 +589,16 @@ const FIGURE_HEAD = new WeakMap();
 export const headRadius = (P) => FIGURE_HEAD.get(P) ?? SEG_DEFAULT.head;
 export const setHeadRadius = (P, r) => FIGURE_HEAD.set(P, r);
 
+/** A named-point figure as the 33-entry array the angle math expects. */
+export function figureLandmarks(P) {
+  const out = Array.from({ length: NUM_LANDMARKS }, () => ({ x: 0, y: 0, z: 0, visibility: 0 }));
+  for (const name of Object.keys(LM)) {
+    const p = P[name];
+    if (p) out[LM[name]] = { x: p.x, y: p.y, z: p.z || 0, visibility: 1 };
+  }
+  return out;
+}
+
 export function buildReference(rig, len) {
   const SEG = len || SEG_DEFAULT;
   const hipC = { x: 0.5, y: 0.62, z: 0 };
@@ -596,15 +614,15 @@ export function buildReference(rig, len) {
     P[`${side}_shoulder`] = sh;
     P[`${side}_hip`] = hp;
 
-    const [thUpper, thFore] = rig[`arm_${side}`];
-    const el = along(sh, SEG.upper, dirVec(thUpper));
+    const arm = rig[`arm_${side}`];
+    const el = along(sh, SEG.upper, dirVec(arm.upper));
     P[`${side}_elbow`] = el;
-    P[`${side}_wrist`] = along(el, SEG.fore, dirVec(thFore));
+    P[`${side}_wrist`] = along(el, SEG.fore, dirVec(arm.fore));
 
-    const [thThigh, thShin] = rig[`leg_${side}`];
-    const kn = along(hp, SEG.thigh, dirVec(thThigh));
+    const leg = rig[`leg_${side}`];
+    const kn = along(hp, SEG.thigh, dirVec(leg.thigh));
     P[`${side}_knee`] = kn;
-    P[`${side}_ankle`] = along(kn, SEG.shin, dirVec(thShin));
+    P[`${side}_ankle`] = along(kn, SEG.shin, dirVec(leg.shin));
   }
   setHeadRadius(P, SEG.head);
   return P;

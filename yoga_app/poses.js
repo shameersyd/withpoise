@@ -33,6 +33,7 @@ export const YOGA_POSES = {
     symmetric: true,
     sanskrit: "Tadasana",
     emoji: "🏔️",
+    view: "front",
     description: "The foundation of all standing poses — builds awareness of posture and balance.",
     steps: [
       { text: "Stand with your feet together, big toes touching", focus: ["left_leg","right_leg"] },
@@ -48,26 +49,15 @@ export const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [-75, -65], arm_right: [-105, -115],
-      leg_left: [-85, -90], leg_right: [-95, -90],
-    },
-    angles: {
-      left_knee:[175,20], right_knee:[175,20],
-      left_hip:[173,20], right_hip:[173,20],
-      left_shoulder:[17,20], right_shoulder:[17,20],
-      left_elbow:[170,20], right_elbow:[170,20],
+      arm_left: { upper: -75, fore: -65 }, arm_right: { upper: -105, fore: -115 },
+      leg_left: { thigh: -85, shin: -90 }, leg_right: { thigh: -95, shin: -90 },
     },
     // Mountain is a posture, not a shape: the legs and the line of the spine
     // are the pose, and the arms are just hanging there.
-    weights: {
-      left_knee: 2,
-      right_knee: 2,
-      left_hip: 2,
-      right_hip: 2,
-      left_shoulder: 1,
-      right_shoulder: 1,
-      left_elbow: 1,
-      right_elbow: 1,
+    joints: {
+      default: { tolerance: 20, weight: 1 },
+      left_knee: { weight: 2 }, right_knee: { weight: 2 },
+      left_hip: { weight: 2 }, right_hip: { weight: 2 },
     },
   },
   warrior1: {
@@ -78,6 +68,7 @@ export const YOGA_POSES = {
     side: "left",
     sanskrit: "Virabhadrasana I",
     emoji: "⚔️",
+    view: "front",
     description: "A powerful standing pose that strengthens legs and opens the chest.",
     steps: [
       { text: "From Mountain Pose, step your right foot back about 3–4 feet", focus: ["right_leg"] },
@@ -93,26 +84,17 @@ export const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [80, 85], arm_right: [100, 95],
-      leg_left: [-20, -105], leg_right: [-110, -105],
-    },
-    angles: {
-      left_knee:[95,22], right_knee:[175,20],
-      left_hip:[108,25], right_hip:[158,25],
-      left_shoulder:[172,25], right_shoulder:[172,25],
-      left_elbow:[175,22], right_elbow:[175,22],
+      arm_left: { upper: 80, fore: 85 }, arm_right: { upper: 100, fore: 95 },
+      leg_left: { thigh: -20, shin: -105 }, leg_right: { thigh: -110, shin: -105 },
     },
     // Both legs carry the pose — the bent front knee and the straight back one.
     // Square hips are the thing everyone gets wrong. Elbows barely matter.
-    weights: {
-      left_knee: 3,
-      right_knee: 3,
-      left_hip: 2,
-      right_hip: 2,
-      left_shoulder: 2,
-      right_shoulder: 2,
-      left_elbow: 1,
-      right_elbow: 1,
+    joints: {
+      default: { tolerance: 25, weight: 2 },
+      left_knee: { tolerance: 22, weight: 3 },
+      right_knee: { tolerance: 20, weight: 3 },
+      left_elbow: { tolerance: 22, weight: 1 },
+      right_elbow: { tolerance: 22, weight: 1 },
     },
   },
   warrior2: {
@@ -123,6 +105,7 @@ export const YOGA_POSES = {
     side: "left",
     sanskrit: "Virabhadrasana II",
     emoji: "🗡️",
+    view: "front",
     description: "Builds stamina and focus while stretching the hips and shoulders.",
     steps: [
       { text: "Stand with your feet wide apart, about 4 feet", focus: ["left_leg","right_leg"] },
@@ -138,26 +121,17 @@ export const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [0, -5], arm_right: [180, 185],
-      leg_left: [-10, -95], leg_right: [-130, -125],
-    },
-    angles: {
-      left_knee:[95,22], right_knee:[175,20],
-      left_hip:[98,25], right_hip:[138,25],
-      left_shoulder:[92,25], right_shoulder:[92,25],
-      left_elbow:[175,20], right_elbow:[175,20],
+      arm_left: { upper: 0, fore: -5 }, arm_right: { upper: 180, fore: 185 },
+      leg_left: { thigh: -10, shin: -95 }, leg_right: { thigh: -130, shin: -125 },
     },
     // As Warrior I, plus the arm line, which is half of what the pose looks
     // like and is held at shoulder height for a long time.
-    weights: {
-      left_knee: 3,
-      right_knee: 3,
-      left_hip: 2,
-      right_hip: 2,
-      left_shoulder: 2,
-      right_shoulder: 2,
-      left_elbow: 1,
-      right_elbow: 1,
+    joints: {
+      default: { tolerance: 25, weight: 2 },
+      left_knee: { tolerance: 22, weight: 3 },
+      right_knee: { tolerance: 20, weight: 3 },
+      left_elbow: { tolerance: 20, weight: 1 },
+      right_elbow: { tolerance: 20, weight: 1 },
     },
   },
   tree: {
@@ -168,6 +142,7 @@ export const YOGA_POSES = {
     side: "left",
     sanskrit: "Vrksasana",
     emoji: "🌳",
+    view: "front",
     description: "A balancing pose that improves focus and strengthens the standing leg.",
     steps: [
       { text: "Stand tall on your left leg, grounding through the foot", focus: ["left_leg"] },
@@ -183,26 +158,18 @@ export const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [80, 85], arm_right: [100, 95],
-      leg_left: [-85, -90], leg_right: [-140, -15],
-    },
-    angles: {
-      left_knee:[175,20], right_knee:[55,30],
-      left_hip:[173,20], right_hip:[128,30],
-      left_shoulder:[172,25], right_shoulder:[172,25],
-      left_elbow:[175,20], right_elbow:[175,20],
+      arm_left: { upper: 80, fore: 85 }, arm_right: { upper: 100, fore: 95 },
+      leg_left: { thigh: -85, shin: -90 }, leg_right: { thigh: -140, shin: -15 },
     },
     // The standing leg and level hips are the whole balance. The raised knee
     // opening out matters next. The arms overhead are the least of it.
-    weights: {
-      left_knee: 3,
-      right_knee: 2,
-      left_hip: 3,
-      right_hip: 3,
-      left_shoulder: 1,
-      right_shoulder: 1,
-      left_elbow: 1,
-      right_elbow: 1,
+    joints: {
+      default: { tolerance: 25, weight: 1 },
+      left_knee: { tolerance: 20, weight: 3 },
+      right_knee: { tolerance: 30, weight: 2 },
+      left_hip: { tolerance: 20, weight: 3 },
+      right_hip: { tolerance: 30, weight: 3 },
+      left_elbow: { tolerance: 20 }, right_elbow: { tolerance: 20 },
     },
   },
   triangle: {
@@ -213,6 +180,7 @@ export const YOGA_POSES = {
     side: "left",
     sanskrit: "Trikonasana",
     emoji: "🔺",
+    view: "front",
     description: "A deep stretch for the hamstrings, hips, and spine.",
     steps: [
       { text: "Stand with your feet wide apart, about 4 feet", focus: ["left_leg","right_leg"] },
@@ -228,26 +196,18 @@ export const YOGA_POSES = {
     ],
     rig: {
       torso: 35,
-      arm_left: [-55, -50], arm_right: [125, 130],
-      leg_left: [-60, -55], leg_right: [-120, -115],
-    },
-    angles: {
-      left_knee:[175,20], right_knee:[175,20],
-      left_hip:[93,25], right_hip:[157,25],
-      left_shoulder:[92,25], right_shoulder:[92,25],
-      left_elbow:[175,20], right_elbow:[175,20],
+      arm_left: { upper: -55, fore: -50 }, arm_right: { upper: 125, fore: 130 },
+      leg_left: { thigh: -60, shin: -55 }, leg_right: { thigh: -120, shin: -115 },
     },
     // Both legs straight is the instruction people break, and the hinge is at
     // the hip rather than the waist. The arm line follows from those.
-    weights: {
-      left_knee: 3,
-      right_knee: 3,
-      left_hip: 3,
-      right_hip: 2,
-      left_shoulder: 2,
-      right_shoulder: 2,
-      left_elbow: 1,
-      right_elbow: 1,
+    joints: {
+      default: { tolerance: 25, weight: 2 },
+      left_knee: { tolerance: 20, weight: 3 },
+      right_knee: { tolerance: 20, weight: 3 },
+      left_hip: { weight: 3 },
+      left_elbow: { tolerance: 20, weight: 1 },
+      right_elbow: { tolerance: 20, weight: 1 },
     },
   },
 };

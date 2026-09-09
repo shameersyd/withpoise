@@ -23,7 +23,7 @@
  */
 
 import { LM, buildReference } from "../yoga_app/pose-core.js";
-import { YOGA_POSES, CORRECTION_TIPS } from "../yoga_app/poses.js";
+import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 
 // Rig units → metres. The rig's torso is 0.26 long; a real shoulder-to-hip span
 // is around half a metre. Angles are scale-invariant, so this only makes the

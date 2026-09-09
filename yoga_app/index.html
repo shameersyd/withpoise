@@ -61,6 +61,19 @@
     }
     .loader-text .status { color: var(--cyan); font-weight: 500; }
 
+    /* Shown instead of the app when a pose definition is malformed. Loud on
+       purpose: the alternative is scoring somebody against a broken shape. */
+    .fatal {
+      max-width: 640px; padding: 24px; text-align: left;
+      color: var(--text-primary);
+    }
+    .fatal h2 { font-size: 20px; margin-bottom: 12px; color: var(--red); }
+    .fatal pre {
+      white-space: pre-wrap; font-size: 13px; line-height: 1.6;
+      color: var(--text-secondary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
     /* ── Pose Selection Screen ── */
     #screen-select {
       background: var(--bg-primary);
@@ -742,7 +755,29 @@ import {
   sidesOf, SideSelector,
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
-import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
+import { YOGA_POSES as POSE_DATA, CORRECTION_TIPS } from "./poses.js";
+import { compileAll } from "./pose-schema.js";
+
+/**
+ * Validate and compile the pose library, or stop.
+ *
+ * A malformed pose is not something to route around. A rig with a missing
+ * segment builds a figure with a limb at the origin, and the app then scores
+ * someone against it and tells them to move — so this fails on the loading
+ * screen, naming the pose and the field, rather than starting anyway.
+ */
+const YOGA_POSES = (() => {
+  try {
+    return compileAll(POSE_DATA);
+  } catch (err) {
+    const screen = document.getElementById("screen-loading");
+    screen.innerHTML = `<div class="fatal">
+        <h2>The pose definitions are broken</h2>
+        <pre>${err.message.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]))}</pre>
+      </div>`;
+    throw err;   // nothing below this line can run meaningfully
+  }
+})();
 import { Coach, HoldTimer, Session, rankCorrections } from "./coach.js";
 import { Voice } from "./voice.js";
 import { FrameBudget } from "./pacing.js";

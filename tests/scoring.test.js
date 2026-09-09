@@ -5,7 +5,7 @@ import {
   jointQuality, VerdictLatch, FALLOFF_MARGIN,
   sidesOf, mirrorPose, mirrorRig, mirrorJoint, mirrorText, SideSelector, buildReference,
 } from "../yoga_app/pose-core.js";
-import { YOGA_POSES, CORRECTION_TIPS } from "../yoga_app/poses.js";
+import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 
 suite("scoring");
 

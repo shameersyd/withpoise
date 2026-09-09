@@ -4,5 +4,6 @@ import "./scoring.test.js";
 import "./filter.test.js";
 import "./coach.test.js";
 import "./pacing.test.js";
+import "./schema.test.js";
 
 run();

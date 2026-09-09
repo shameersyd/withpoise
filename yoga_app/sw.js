@@ -19,7 +19,7 @@ const RUNTIME_CACHE = "yoga-pose-runtime-v1";
 // A test asserts this list covers everything the app imports; it had silently
 // fallen behind twice before that existed.
 const ASSETS = ["./", "./index.html", "./manifest.json",
-                "./pose-core.js", "./poses.js", "./pose-worker.js",
+                "./pose-core.js", "./poses.js", "./pose-schema.js", "./pose-worker.js",
                 "./coach.js", "./voice.js", "./pacing.js"];
 
 // The MediaPipe runtime and the model files are large, immutable and versioned
