@@ -4,7 +4,7 @@ A survey of `yoga_app/` and `serve.py` as they stand today. Descriptive only:
 nothing here is a proposal, and nothing was changed to write it.
 
 > **Currency.** Written at Phase 0 of `CLAUDE_CODE_BRIEF.md` and updated at the
-> end of Phases 1, 2 and 3. Sections 1–4 describe the code as it stands; section 5
+> end of Phases 1 to 4. Sections 1–4 describe the code as it stands; section 5
 > marks what has been fixed and what is still open.
 
 Files:
@@ -13,7 +13,8 @@ Files:
 |---|---|
 | `yoga_app/index.html` | Markup, CSS, and one inline `<script type="module">`: the DOM, the canvas, the camera and all session state |
 | `yoga_app/pose-core.js` | The pure half — angle math, reliability, camera geometry, scoring, mirroring, smoothing, latching. No DOM, no canvas, no worker |
-| `yoga_app/poses.js` | The five pose definitions and the correction phrasings |
+| `yoga_app/poses.js` | The six pose definitions and the correction phrasings. Data only |
+| `yoga_app/pose-schema.js` | What a pose may contain, checked at load; and the targets derived from its rig |
 | `yoga_app/coach.js` | What to say and when, plus the hold timer and the session queue. Pure: time is passed in |
 | `yoga_app/voice.js` | `speechSynthesis` and the completion tone, and the remembered on/off switch |
 | `yoga_app/pacing.js` | How often to run detection, chosen from measured inference time |
@@ -21,6 +22,7 @@ Files:
 | `yoga_app/sw.js` | Service worker: app shell + CDN/model caching |
 | `yoga_app/manifest.json` | PWA manifest |
 | `serve.py` | Local HTTPS dev server with a self-signed cert |
+| `tools/show-pose.sh` | What shape a rig actually makes: validation, derived angles, an ASCII sketch |
 | `tests/` | Harness, fixtures and suites, run by `./tests/run.sh`; plus `smoke.sh`, a browser test of the parts `jsc` cannot see |
 
 `pose-core.js` is imported by both `index.html` and `pose-worker.js`, which is
@@ -243,68 +245,66 @@ tables sit alongside: `CORRECTION_TIPS` (`index.html`), `ANGLE_JOINTS`
 (`index.html`), `BODY_PARTS` (`index.html`), `SEG_DEFAULT`
 (`index.html`).
 
-### Schema (as actually used by the code)
+### Schema
+
+Defined and enforced by `pose-schema.js`; written for authors in
+`docs/ADDING_A_POSE.md`.
 
 ```js
 key: {
-  name:        string,        // "Warrior II"
-  sanskrit:    string,
-  emoji:       string,
-  description: string,        // pose-selection card copy
+  name, sanskrit, emoji, description,     // all required, all non-empty
 
-  symmetric:   true,          // or omitted, in which case:
-  side:        "left",        // which mirror this definition is written for
+  view: "front" | "side",                 // default "front"
+  symmetric: true,                        // or side: "left" | "right"
 
-  steps: [                    // drives the walkthrough + the animated demo
-    { text: string,
-      focus: Array<"torso"|"head"|"left_arm"|"right_arm"|"left_leg"|"right_leg"> }
-  ],
-  tips: [ { icon: string, text: string } ],
+  steps: [ { text, focus: [ bodyPart… ] } ],
+  tips:  [ { icon, text } ],
 
-  rig: {                      // segment directions → the demo figure + outline
-    torso:    theta | [theta, phi],
-    arm_left: [thetaUpper, thetaFore],     // NOTE: 2 scalars, not [theta,phi]
-    arm_right:[thetaUpper, thetaFore],
-    leg_left: [thetaThigh, thetaShin],
-    leg_right:[thetaThigh, thetaShin],
+  rig: {                                  // the shape, stated once
+    torso:     theta | [theta, phi],
+    arm_left:  { upper, fore },           // each a direction
+    arm_right: { upper, fore },
+    leg_left:  { thigh, shin },
+    leg_right: { thigh, shin },
   },
 
-  angles: {                   // the eight scored joints
-    left_knee: [targetDeg, toleranceDeg], right_knee: [...],
-    left_hip:  [...],  right_hip:  [...],
-    left_shoulder: [...], right_shoulder: [...],
-    left_elbow: [...], right_elbow: [...],
-  },
-
-  weights: {                  // how much of the pose each joint is
-    left_knee: 3, ...         // relative within a pose; only ratios matter
+  joints: {                               // optional, and so is every entry
+    default:   { tolerance, weight },
+    left_knee: { tolerance: 20, weight: 3 },
   },
 }
 ```
 
-An asymmetric pose is stored once. `sidesOf(pose)` returns it and its mirror,
-and `mirrorPose` derives the second from the first: the rig reflects across the
-sagittal plane (θ → 180 − θ, φ untouched), targets and weights swap joints,
-`focus` swaps body parts, and the words "left" and "right" swap in the
-instruction text.
+**The rig is the only description of the shape.** `compilePose` derives the
+eight target angles from it by building the figure and reading its joints back.
+There is nothing to keep in sync, because there is nothing to sync with.
 
-**The `rig` grammar is overloaded and undocumented in code.** `dirVec()`
-(`index.html`) accepts `theta` or `[theta, phi]`, where `theta` is degrees
-in the image plane (0° = right, 90° = up) and `phi` tilts the segment out of
-the frontal plane away from the camera. But `buildReference()`
-(`index.html`) destructures `rig.arm_left` as `[thUpper, thFore]` — two
-*segment* directions, each then passed to `dirVec()` as a bare scalar. So the
-same two-element array notation means "theta, phi" at one level and
-"upper segment, lower segment" at another. Every pose in the file uses only
-scalar directions inside the limb pairs, so no `phi` is currently expressible
-for a limb — only for `torso`.
+A direction is `theta` — degrees in the image plane, 0° right and 90° up — or
+`[theta, phi]` to tilt the segment out of the frontal plane. An array always
+means the latter now; it used to mean `[theta, phi]` at the torso and
+`[upperSegment, lowerSegment]` inside a limb, which is why no limb could carry a
+phi and why every pose was planar.
 
-The comment above `YOGA_POSES` claims "each target is derived from the rig
-above it". **No code does this.** `angles` are hand-entered constants that
-happen to correspond to the rig. Nothing validates them against each other and
-nothing would notice if they drifted.
+`view` is geometry, not a label: it decides the axis the body's left and right
+sides separate along — across the image for a front pose, along the camera axis
+for a side one, so the two sides project onto each other. Downward Dog is a side
+pose, and gets it because a single camera has nothing to measure on a body
+pointing at the lens.
+
+`joints` carries tolerance (how far off is still right) and weight (how much of
+the pose that joint is), with `default` covering the rest and a global fallback
+of 25° and 1. A weight of `0` removes the joint from the pose completely — not
+scored, not in coverage, not coloured, never corrected.
+
+An asymmetric pose is written for one side and `sidesOf()` derives the other.
+
+**Validation runs at load and a bad definition stops the app**, on a red screen
+naming the pose and the field. Not a warning: a rig with a missing segment
+builds a figure with a limb at the origin, and the app would go on to score
+somebody against it and tell them to move.
 
 The eight joints are fixed by `ANGLE_JOINTS` and cannot be extended per-pose.
+Wrists, ankles, neck and spine curvature are not measured at all.
 
 ---
 
@@ -457,6 +457,9 @@ tests that hold each one down are named after it.
 | Every joint counted the same, so a straight elbow was worth a collapsed standing leg | Per-joint weights in the pose schema |
 | Unscored joints left the denominator, so a half-visible body read 100%, and a fault that swung a limb out of frame *raised* the score | `coverage` alongside the score; "Perfect form" and the green glow are withheld below full coverage |
 | Four of five poses were written for one side only, scoring the second half of a practice as entirely wrong | Both sides derived from one definition, and the side detected per frame with a margin and a hold |
+| Every pose stated its shape twice, as a rig and again as eight target angles — forty numbers that were all just the derived value rounded | The rig is the only description; targets are computed from it |
+| A two-element array meant `[theta, phi]` at the torso and "two segments" inside a limb, so no limb could leave the frontal plane | Limbs are objects with named segments; an array always means `[theta, phi]` |
+| Nothing checked a pose definition, so a malformed one scored people against a broken shape | Validated at load, and a bad one stops the app naming the field |
 | Camera angle was scored as bad form — a correct Triangle 80° off-axis lost 37 points | Joints reading off the depth axis are reported `uncertain` and the user is told to turn; 30° off-axis now scores identically to head-on |
 | `calcAngle` added an epsilon to the *product* of the magnitudes, so a straight limb read 179.9° in pixels and 179.7° in metres | Floored divisor; exactly 180° in both |
 | `VIS_THRESHOLD` declared in two files that could not import each other | One definition in `pose-core.js`, imported by both |
@@ -486,26 +489,15 @@ Ordered roughly by how much damage each one does.
    matches the mirrored variant, so the *shape* is right — but the side it
    reports is then the wrong one, and the arrows still point the wrong way.
 
-2. **Target angles duplicate the rig by hand.** Every pose states the same shape
-   twice, once as segment directions and once as joint angles, with a comment
-   claiming the second is derived from the first. Nothing derives it and nothing
-   checks it. The fixtures now prove the two currently agree, which is what
-   makes deriving them a safe change. *Phase 4.*
-
-3. **The `rig` grammar is overloaded.** A two-element array means `[theta, phi]`
-   at the torso and `[upperSegment, lowerSegment]` inside a limb. No limb can
-   currently express a `phi` at all — which is why every pose in the file is
-   planar. *Phase 4.*
-
-4. **`currentModel` exists in both modules** with different meanings, and the
+2. **`currentModel` exists in both modules** with different meanings, and the
    model picker markup is duplicated verbatim in two places, kept in sync by
    `renderModelToggles()` querying `[data-model-seg]` globally.
 
-5. **Per-frame allocation in the hot loop.** `reliableLandmarks` builds a `Set`
+3. **Per-frame allocation in the hot loop.** `reliableLandmarks` builds a `Set`
    and several closures per tick, and the side work now runs `matchSinglePose`
    twice. Negligible next to inference, but it is garbage on every frame.
 
-6. **No safety disclaimer.** The app tells people how to move their spine.
+4. **No safety disclaimer.** The app tells people how to move their spine.
     *Phase 5.*
 
 ### `serve.py`
@@ -525,22 +517,19 @@ Ordered roughly by how much damage each one does.
 
 ## Where the fragility concentrates
 
-Two places now account for most of it:
+Nowhere in particular any more, which is a change. What is left is a short list,
+and none of it is a correctness problem in the scoring, the pump or the schema.
 
-- **The pose schema** (#2, #3) — one shape written down twice, in a grammar that
-  means two different things at two levels. Phase 4's territory, and now the
-  largest remaining source of the kind of bug that hides.
-
-What is left is a short list, and none of it is a correctness problem in the
-scoring or the pump. Worth noting how the two worst bugs were actually found,
-because neither was found by looking:
+Worth recording how the two worst bugs were actually found, because neither was
+found by reading code:
 
 - The overlay was mapped to the screen differently from the video. It had been
-  shipped, and looked at, and not seen — because a desktop window is close
-  enough to 16:9 that the two agree.
-- The landmarker never started, in every session, for the app's entire history.
-  145 pure-function tests were green throughout. `tests/smoke.sh` exists because
-  a suite that cannot see the thing that is broken is worse company than none.
+  shipped, and looked at, and not seen — a desktop window is close enough to
+  16:9 that the two agree.
+- The landmarker never started. In every session, for the app's entire history,
+  while 145 pure-function tests stayed green.
 
-Both were caught by putting the real thing in front of a real browser and
-looking at what came back.
+Both turned up from putting the real thing in front of a real browser and
+looking at what came back. The pure suite is 185 assertions now and still could
+not find either of them; `tests/smoke.sh` exists because a suite that cannot see
+the thing that is broken is worse company than none.
