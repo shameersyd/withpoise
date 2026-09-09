@@ -4,7 +4,7 @@ A survey of `yoga_app/` and `serve.py` as they stand today. Descriptive only:
 nothing here is a proposal, and nothing was changed to write it.
 
 > **Currency.** Written at Phase 0 of `CLAUDE_CODE_BRIEF.md` and updated at the
-> end of Phases 1 to 4. Sections 1–4 describe the code as it stands; section 5
+> end of Phases 1 to 5. Sections 1–4 describe the code as it stands; section 5
 > marks what has been fixed and what is still open.
 
 Files:
@@ -21,7 +21,8 @@ Files:
 | `yoga_app/pose-worker.js` | MediaPipe landmarker and the detect loop, off the main thread |
 | `yoga_app/sw.js` | Service worker: app shell + CDN/model caching |
 | `yoga_app/manifest.json` | PWA manifest |
-| `serve.py` | Local HTTPS dev server with a self-signed cert |
+| `serve.py` | Local HTTPS dev server with a self-signed cert, no-cache headers and port fallback |
+| `LICENSE`, `README.md` | MIT, and the deploy-first README |
 | `tools/show-pose.sh` | What shape a rig actually makes: validation, derived angles, an ASCII sketch |
 | `tests/` | Harness, fixtures and suites, run by `./tests/run.sh`; plus `smoke.sh`, a browser test of the parts `jsc` cannot see |
 
@@ -473,6 +474,9 @@ tests that hold each one down are named after it.
 | Nine to twenty-nine megabytes behind a spinner that could not tell slow from dead | A streamed download with real byte counts, and a retry on failure |
 | The screen slept mid-hold | A wake lock, re-taken when the page comes back |
 | A denied camera raised an `alert()` that said the same thing whatever had happened | Four distinct diagnoses in the overlay, with a retry |
+| An app giving physical-form feedback said nothing about what it can see | A first-run notice, and a standing line under the pose list |
+| `serve.py` gave a traceback for a taken port, a traceback for a missing `openssl`, reused an expired certificate forever, and served everything cacheable | All four fixed, and each tested by causing it |
+| No licence, so nobody could legally use any of it | MIT |
 | The precache list was host-absolute, so a subpath deploy cached nothing at all | Relative paths, verified at a root and at `/yoga_app/` |
 | App shell and runtime shared a cache version, so any deploy re-downloaded the model | Versioned apart, both guarded by tests |
 | `updateTrackingUI` called with the wrong arity, working by accident | Fixed |
@@ -480,7 +484,7 @@ tests that hold each one down are named after it.
 
 ### Still open
 
-Ordered roughly by how much damage each one does.
+Three, none of them a correctness problem. Ordered by how much damage each does.
 
 1. **Rear camera flips the anatomy, not just the pixels.** The flip handler
    swaps `scaleX(-1)` on both video and canvas, keeping the overlay registered
@@ -497,21 +501,11 @@ Ordered roughly by how much damage each one does.
    and several closures per tick, and the side work now runs `matchSinglePose`
    twice. Negligible next to inference, but it is garbage on every frame.
 
-4. **No safety disclaimer.** The app tells people how to move their spine.
-    *Phase 5.*
-
 ### `serve.py`
 
-18. Bind failure raises a raw `OSError` traceback — the common "port 8443
-    already in use" case gives no useful message and no retry.
-19. `generate_cert()` returns early if the files merely **exist**, so an expired
-    cert is reused forever, and a missing `openssl` binary raises
-    `FileNotFoundError` from `subprocess.run` with no explanation.
-20. `SimpleHTTPRequestHandler` sends no cache headers, so an edited file needs a
-    hard reload on the phone — and with a service worker registered, a stale
-    precache compounds it.
-21. `os.chdir(DIR)` mutates process CWD for the lifetime of the server; the cert
-    paths are resolved before it, which is the only reason this works.
+Nothing outstanding. The four failures listed here at Phase 0 — a traceback on
+a taken port, a traceback on a missing `openssl`, an expired certificate reused
+forever, and no cache headers — are fixed, and each was tested by causing it.
 
 ---
 
