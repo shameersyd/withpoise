@@ -1158,6 +1158,8 @@ function advanceSession() {
   // Same pose, other side still owed. The side latch is cleared so the tracker
   // re-decides from scratch rather than defending the side just finished.
   holdTimer.reset();
+  lostSince = 0;
+  regainedSince = 0;
   coach.nextPose();
   sideSelector.reset();
   updateHoldBar({ state: "idle", remaining: HOLD_SECONDS });
@@ -1546,6 +1548,8 @@ function resetTrackPhase() {
   sideSelector.reset();
   currentVariant = null;
   holdTimer.reset();
+  lostSince = 0;
+  regainedSince = 0;
   coach.nextPose();
   completedAt = 0;
   updateHoldBar({ state: "idle", remaining: HOLD_SECONDS });
@@ -1719,6 +1723,92 @@ document.getElementById("btn-resume").addEventListener("click", () => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Losing the body
+//
+// Distinguished from a body that is merely partly out of shot, which is normal
+// in a small room and which the app deliberately keeps working through — the
+// feet leaving the bottom of the frame should not end a session. Only a body
+// that is gone, turned so far the torso cannot be found, or visible in so
+// small a part that a score would be meaningless, stops the scoring.
+// ─────────────────────────────────────────────────────────────
+const LOST_GRACE_MS = 1200;    // before pausing — a lost frame or two is normal
+const REGAIN_MS = 400;         // before resuming, so it cannot flicker
+const MIN_COVERAGE = 0.25;     // below this a score would be about nothing
+const PARTIAL_COVERAGE = 0.45; // above MIN but worth mentioning out loud
+
+const LOST_TITLES = {
+  gone: "Where did you go?",
+  framing: "Get back into frame",
+  coverage: "I can't see enough of you",
+};
+const LOST_SUBS = {
+  gone: "Step back in front of the camera and we'll pick up where we left off.",
+  framing: "Turn so the camera can see your shoulders and hips.",
+  coverage: "Step back until more of you is in shot.",
+};
+
+let lostSince = 0;
+let lostReason = "gone";
+let regainedSince = 0;
+
+function framingProblem(landmarks, reliable, ev) {
+  if (!landmarks) return "gone";
+  if (!torsoVisible(reliable)) return "framing";
+  if (ev && ev.match.coverage < MIN_COVERAGE) return "coverage";
+  return null;
+}
+
+/**
+ * Everything the live view needs from one frame of landmarks: the side being
+ * tracked, its match, the latched verdicts to colour by, and which joints are
+ * fit to be judged at all.
+ */
+function evaluate(landmarks, world, reliable, w, h, timestamp) {
+  const angles = computeAngles(world, landmarks, w, h);
+
+  // How square the user is to the lens, and which joints that leaves
+  // unmeasurable. Both need world landmarks; without them we score every
+  // joint as before rather than silently marking the whole body uncertain.
+  const frame = world ? bodyFrame(world) : null;
+  const measurability = world ? jointMeasurability(world) : null;
+
+  // Score every side of the pose and keep the one the body is closest to.
+  // A user doing the second half of their practice used to be scored against
+  // the first half's shape — every leg and hip joint wrong, and corrections
+  // telling them to undo a correct pose.
+  const scored = VARIANTS[selectedPoseKey].map((variant, i) => ({
+    key: i,
+    variant,
+    match: matchSinglePose(angles, variant.pose.angles,
+      { reliable, measurability, weights: variant.pose.weights }),
+  }));
+  const chosen = scored[sideSelector.pick(
+    scored.map(c => ({ key: c.key, score: c.match.score })), timestamp)];
+
+  currentVariant = chosen.variant;
+  const match = chosen.match;
+  match.turnDegrees = frame ? frame.turnDegrees : 0;
+
+  // Colours and corrections run off the latched verdicts, not the raw
+  // threshold, so a joint resting on its tolerance holds its colour instead of
+  // strobing. The score underneath stays graded and continuous.
+  const shown = verdicts.apply(match.results);
+  match.aligned = Object.values(shown).filter(r => r.ok).length;
+
+  // A joint we cannot measure is drawn like one we cannot see: greyed and
+  // dashed, never red. Being told to fix a joint the camera can't judge is
+  // worse than being told nothing.
+  const judged = new Set(reliable);
+  for (const joint of match.uncertain) judged.delete(joint);
+
+  // Ranked by how much of the pose each fault actually is, so the panel leads
+  // with the same thing the voice would say.
+  match.corrections = rankCorrections(correctionsFor(shown, CORRECTION_TIPS), shown);
+
+  return { chosen, match, shown, judged };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Render loop
 //
 // Inference happens in the worker. This loop only ships frames to it and paints
@@ -1759,7 +1849,7 @@ function startTrackingLoop() {
     }
 
     // ── Get ready: hold the outline until the torso is in shot, then count in ──
-    if (trackPhase !== "live") {
+    if (trackPhase !== "live" && trackPhase !== "lost") {
       const ready = reliable && torsoVisible(reliable);
 
       if (!ready) {
@@ -1806,86 +1896,98 @@ function startTrackingLoop() {
       return;
     }
 
-    // ── Live: score the pose and show corrections ──
-    if (landmarks) {
-      const angles = computeAngles(world, landmarks, w, h);
+    // ── Live: score the pose, and decide whether we can still see enough ──
+    const ev = landmarks ? evaluate(landmarks, world, reliable, w, h, timestamp) : null;
+    const problem = framingProblem(landmarks, reliable, ev);
 
-      // How square the user is to the lens, and which joints that leaves
-      // unmeasurable. Both need world landmarks; without them we score every
-      // joint as before rather than silently marking the whole body uncertain.
-      const frame = world ? bodyFrame(world) : null;
-      const measurability = world ? jointMeasurability(world) : null;
+    if (trackPhase === "live") {
+      if (problem) {
+        if (!lostSince) lostSince = timestamp;
+        if (timestamp - lostSince > LOST_GRACE_MS) {
+          trackPhase = "lost";
+          lostReason = problem;
+          regainedSince = 0;
+        }
+      } else {
+        lostSince = 0;
+      }
+    }
 
-      // Score every side of the pose and keep the one the body is closest to.
-      // A user doing the second half of their practice used to be scored
-      // against the first half's shape — every leg and hip joint wrong, and
-      // corrections telling them to undo a correct pose.
-      const scored = VARIANTS[selectedPoseKey].map((variant, i) => ({
-        key: i,
-        variant,
-        match: matchSinglePose(angles, variant.pose.angles,
-          { reliable, measurability, weights: variant.pose.weights }),
-      }));
-      const chosen = scored[sideSelector.pick(
-        scored.map(c => ({ key: c.key, score: c.match.score })), timestamp)];
+    // ── Lost: stop scoring and say so ──
+    //
+    // Scoring used to carry on regardless, quietly dropping joints out of the
+    // denominator, so a body halfway out of shot still produced a confident
+    // percentage. Now it pauses, and the reason is both shown and spoken —
+    // spoken because a user who has wandered out of frame is by definition not
+    // looking at the screen.
+    if (trackPhase === "lost") {
+      updateHoldBar(holdTimer.update(false, timestamp));
+      setOverlay(`lost-${lostReason}`, LOST_TITLES[lostReason], LOST_SUBS[lostReason]);
+      speakFrom({ phase: "lost", reason: lostReason, detected: !!landmarks }, timestamp);
+      updateTrackingUI("", null, null, false);
 
-      currentVariant = chosen.variant;
-      const match = chosen.match;
-      match.turnDegrees = frame ? frame.turnDegrees : 0;
-
-      // Colours and corrections run off the latched verdicts, not the raw
-      // threshold, so a joint resting on its tolerance holds its colour instead
-      // of strobing. The score underneath stays graded and continuous.
-      const shown = verdicts.apply(match.results);
-      match.aligned = Object.values(shown).filter(r => r.ok).length;
-
-      // A joint we cannot measure is drawn like one we cannot see: greyed and
-      // dashed, never red. Being told to fix a joint the camera can't judge is
-      // worse than being told nothing.
-      const judged = new Set(reliable);
-      for (const joint of match.uncertain) judged.delete(joint);
-
-      // Ranked by how much of the pose each fault actually is, so the panel
-      // leads with the same thing the voice would say.
-      match.corrections = rankCorrections(correctionsFor(shown, CORRECTION_TIPS), shown);
-
-      const solid = match.score >= HOLD_SCORE && match.coverage >= HOLD_COVERAGE;
-      const hold = holdTimer.update(solid, timestamp);
-      updateHoldBar(hold);
-      if (hold.justCompleted) {
-        voice.chime();
-        completedAt = timestamp;
+      if (!problem) {
+        if (!regainedSince) regainedSince = timestamp;
+        if (timestamp - regainedSince > REGAIN_MS) {
+          trackPhase = "live";
+          lostSince = 0;
+          hideOverlay();
+        }
+      } else {
+        regainedSince = 0;
       }
 
-      speakFrom({
-        phase: "live",
-        detected: true,
-        correct: solid,
-        corrections: match.corrections,
-        results: shown,
-        needsTurn: match.turnDegrees > TURN_LIMIT_DEGREES && match.uncertain.length > 0,
-        tooLittleVisible: match.scored === 0 || match.coverage < 0.45,
-        hold,
-      }, timestamp);
-
-      if (session && completedAt && timestamp - completedAt > ADVANCE_DELAY_MS) {
-        completedAt = 0;
-        advanceSession();
-      }
-
-      const target = buildTargetFigure(chosen.variant, landmarks, w, h);
       if (ghostOn) {
-        drawGhost(ctx, chosen.variant, w, h, landmarks, shown, target, judged);
+        drawGhost(ctx, currentVariant || primary(selectedPoseKey), w, h,
+                  landmarks, null, null, reliable);
       }
-      drawSkeleton(ctx, landmarks, w, h, shown, target, judged);
-      updateTrackingUI(sidedName(chosen.variant.pose), match, shown, true);
-    } else {
-      // Nobody in shot. The hold has to break — banking ten seconds of a pose
-      // the camera could not see would be the same lie the score used to tell.
+      if (landmarks) {
+        ctx.globalAlpha = 0.35;
+        drawSkeleton(ctx, landmarks, w, h, {}, null, reliable);
+        ctx.globalAlpha = 1;
+      }
+      return;
+    }
+
+    if (!ev) {
       updateHoldBar(holdTimer.update(false, timestamp));
       if (ghostOn) drawGhost(ctx, currentVariant || primary(selectedPoseKey), w, h, null, null);
       updateTrackingUI("", null, null, false);
+      return;
     }
+
+    const { chosen, match, shown, judged } = ev;
+
+    const solid = match.score >= HOLD_SCORE && match.coverage >= HOLD_COVERAGE;
+    const hold = holdTimer.update(solid, timestamp);
+    updateHoldBar(hold);
+    if (hold.justCompleted) {
+      voice.chime();
+      completedAt = timestamp;
+    }
+
+    speakFrom({
+      phase: "live",
+      detected: true,
+      correct: solid,
+      corrections: match.corrections,
+      results: shown,
+      needsTurn: match.turnDegrees > TURN_LIMIT_DEGREES && match.uncertain.length > 0,
+      tooLittleVisible: match.coverage < PARTIAL_COVERAGE,
+      hold,
+    }, timestamp);
+
+    if (session && completedAt && timestamp - completedAt > ADVANCE_DELAY_MS) {
+      completedAt = 0;
+      advanceSession();
+    }
+
+    const target = buildTargetFigure(chosen.variant, landmarks, w, h);
+    if (ghostOn) {
+      drawGhost(ctx, chosen.variant, w, h, landmarks, shown, target, judged);
+    }
+    drawSkeleton(ctx, landmarks, w, h, shown, target, judged);
+    updateTrackingUI(sidedName(chosen.variant.pose), match, shown, true);
   }
 
   requestAnimationFrame(renderFrame);

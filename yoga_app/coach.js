@@ -174,6 +174,15 @@ export function rankCorrections(corrections, results) {
 // How long to let someone walk away from the phone before saying anything.
 export const FRAMING_GRACE_MS = 2500;
 
+// Said when tracking has already started and the body is then lost. Each names
+// the thing to do, not the thing that happened: "step back in" is actionable,
+// "tracking paused" is not.
+export const LOST_MESSAGES = {
+  gone: "I've lost you. Step back in front of the camera.",
+  framing: "Turn so I can see your shoulders and hips.",
+  coverage: "Step back — I can only see part of you.",
+};
+
 export const SPEECH = {
   minGapMs: 4500,        // never two corrections closer than this
   repeatGapMs: 15000,    // and never the same one again inside this
@@ -203,6 +212,7 @@ export class Coach {
     this.lastCountdown = null;
     this.focusJoint = null;        // the one thing currently being asked for
     this.framingSince = null;
+    this.lastPhase = null;
   }
 
   /** Forget only what is specific to one pose, keeping the throttle honest. */
@@ -213,6 +223,7 @@ export class Coach {
     this.lastCountdown = null;
     this.focusJoint = null;
     this.framingSince = null;
+    this.lastPhase = null;
   }
 
   say(kind, text, now, { interrupt = false, throttled = true } = {}) {
@@ -230,6 +241,23 @@ export class Coach {
   update(state, now) {
     const { phase, hold } = state;
     if (phase !== "framing") this.framingSince = null;
+
+    // Losing someone mid-pose is worth saying at once. They have already had a
+    // grace period of silence before the app decided they were gone, and they
+    // are by definition not looking at the screen.
+    if (phase !== this.lastPhase) {
+      if (phase === "lost") this.lastFramingAt = -Infinity;
+      this.lastPhase = phase;
+    }
+
+    // ── lost mid-pose ──
+    if (phase === "lost") {
+      if (now - this.lastFramingAt < this.cfg.framingGapMs) return null;
+      this.lastFramingAt = now;
+      this.wasCorrect = false;
+      return this.say("lost", LOST_MESSAGES[state.reason] || LOST_MESSAGES.gone,
+        now, { interrupt: true });
+    }
 
     // ── getting into shot ──
     //

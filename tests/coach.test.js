@@ -1,5 +1,5 @@
 import { suite, test, assert, assertEqual, assertClose, assertDeepEqual } from "./harness.js";
-import { HoldTimer, Session, Coach, rankCorrections, SPEECH, FRAMING_GRACE_MS } from "../yoga_app/coach.js";
+import { HoldTimer, Session, Coach, rankCorrections, SPEECH, FRAMING_GRACE_MS, LOST_MESSAGES } from "../yoga_app/coach.js";
 
 suite("hold timer");
 
@@ -384,4 +384,42 @@ test("the framing grace restarts for each pose in a session", () => {
   coach.update({ phase: "live", detected: true, hold: { state: "idle" } }, 100);
   assertEqual(coach.update({ phase: "framing", detected: false }, 200), null,
     "leaving framing resets the grace, so the next pose gets the same quiet start");
+});
+
+suite("losing the body");
+
+test("being lost is said at once, then rarely", () => {
+  // No grace here, unlike the framing prompt before a pose starts: the app has
+  // already waited out its own grace period before deciding the body is gone.
+  const coach = new Coach();
+  coach.update(liveState(), 0);
+  const first = coach.update({ phase: "lost", reason: "gone", detected: false }, 100);
+  assertEqual(first.text, "I've lost you. Step back in front of the camera.");
+  assert(first.interrupt);
+  assertEqual(coach.update({ phase: "lost", reason: "gone" }, 3000), null, "not again yet");
+  assert(coach.update({ phase: "lost", reason: "gone" }, SPEECH.framingGapMs + 200));
+});
+
+test("each way of being lost is named by what to do about it", () => {
+  for (const [reason, expected] of Object.entries(LOST_MESSAGES)) {
+    const coach = new Coach();
+    assertEqual(coach.update({ phase: "lost", reason }, 0).text, expected);
+  }
+  const coach = new Coach();
+  assertEqual(coach.update({ phase: "lost", reason: "something new" }, 0).text,
+    LOST_MESSAGES.gone, "an unknown reason still says something useful");
+});
+
+test("coming back does not re-announce a pose already underway", () => {
+  const coach = new Coach();
+  const holding = liveState({ correct: true,
+    hold: { state: "holding", remaining: 8, justStarted: true } });
+  assertEqual(coach.update(holding, 0).text, "That's it. Hold for 8 seconds.");
+
+  coach.update({ phase: "lost", reason: "gone" }, 1000);
+  // Back in the pose. The hold restarted, so it is announced again — the user
+  // needs to know their ten seconds started over.
+  const back = coach.update(liveState({ correct: true,
+    hold: { state: "holding", remaining: 10, justStarted: true } }), 5000);
+  assertEqual(back.text, "That's it. Hold for 10 seconds.");
 });
