@@ -73,33 +73,89 @@ let landmarker = null;
 let currentModel = null;
 let currentDelegate = null;
 
-async function createLandmarker(vision, model, delegate) {
+/**
+ * Download the model ourselves rather than handing MediaPipe a URL.
+ *
+ * It is 13 MB, or 30 for the heavy model, and on a hotel wifi that is a long
+ * time watching a spinner that cannot distinguish "slow" from "never". Passing
+ * modelAssetPath gives no progress and no way to tell the two apart; reading
+ * the body stream ourselves gives both.
+ *
+ * Goes through the service worker like any other fetch, so a second session
+ * completes this from cache in one tick.
+ */
+async function fetchModel(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Model download failed (${res.status} ${res.statusText})`);
+
+  const total = Number(res.headers.get("content-length")) || 0;
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());   // no streams here
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  let lastReport = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    // Every chunk is several hundred messages over a 13 MB download; nobody
+    // can read a progress bar that fast anyway.
+    const now = performance.now();
+    if (now - lastReport > 100) {
+      lastReport = now;
+      onProgress(received, total);
+    }
+  }
+  onProgress(received, total || received);
+
+  const bytes = new Uint8Array(received);
+  let at = 0;
+  for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.length; }
+  return bytes;
+}
+
+async function createLandmarker(vision, bytes, delegate) {
   return PoseLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: MODELS[model], delegate },
+    // A copy per attempt: the buffer may be detached by the attempt that fails,
+    // and the GPU attempt failing is the whole reason there is a second one.
+    baseOptions: { modelAssetBuffer: new Uint8Array(bytes), delegate },
     runningMode: "VIDEO",
     numPoses: 1,
   });
 }
 
+const mb = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
+
 async function init(model) {
   const which = MODELS[model] ? model : "full";
-  try {
-    postMessage({ type: "status", state: "loading", model: which,
-                  message: which === "heavy" ? "Loading heavy model (~30 MB)…"
-                                             : "Loading pose model (~13 MB)…" });
+  const loading = (message, progress) =>
+    postMessage({ type: "status", state: "loading", model: which, message, progress });
 
+  try {
+    loading("Starting the pose runtime…", null);
     const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+
+    loading("Downloading the pose model…", 0);
+    const bytes = await fetchModel(MODELS[which], (received, total) => {
+      loading(total
+        ? `Downloading the pose model — ${mb(received)} of ${mb(total)} MB`
+        : `Downloading the pose model — ${mb(received)} MB`,
+        total ? received / total : null);
+    });
 
     // GPU first, CPU if the device has no usable WebGL inside a worker. Which
     // one we ended up on is reported, because it is the single biggest factor
     // in how fast this runs and it was previously invisible.
+    loading("Starting up on the GPU…", 1);
     try {
-      landmarker = await createLandmarker(vision, which, "GPU");
+      landmarker = await createLandmarker(vision, bytes, "GPU");
       currentDelegate = "GPU";
     } catch (gpuError) {
-      postMessage({ type: "status", state: "loading", model: which,
-                    message: "GPU unavailable — falling back to CPU…" });
-      landmarker = await createLandmarker(vision, which, "CPU");
+      loading("No GPU here — starting on the CPU…", 1);
+      landmarker = await createLandmarker(vision, bytes, "CPU");
       currentDelegate = "CPU";
     }
 
@@ -107,7 +163,9 @@ async function init(model) {
     frames.reset();
     postMessage({ type: "status", state: "ready", model: which, delegate: currentDelegate });
   } catch (err) {
-    postMessage({ type: "status", state: "error", model: which,
+    // Everything here is a download or a device capability, so everything here
+    // is worth trying again.
+    postMessage({ type: "status", state: "error", model: which, retryable: true,
                   message: err && err.message ? err.message : String(err) });
   }
 }

@@ -527,6 +527,39 @@
       text-shadow: 0 0 30px rgba(0, 229, 255, 0.5);
     }
     #countdown-num.pulse { animation: pop 0.5s ease; }
+
+    /* Real progress, because several megabytes behind a spinner cannot tell a
+       slow connection from a dead one. */
+    #load-progress {
+      width: min(260px, 70vw); height: 5px;
+      border-radius: 3px; margin-top: 6px;
+      background: rgba(255,255,255,0.14);
+      overflow: hidden; display: none;
+    }
+    #load-progress.visible { display: block; }
+    #load-progress-fill {
+      height: 100%; width: 0%;
+      background: var(--cyan);
+      transition: width 0.2s ease;
+    }
+    #load-progress.unknown #load-progress-fill {
+      width: 40%;
+      animation: sweep 1.4s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0% { transform: translateX(-100%); } 100% { transform: translateX(250%); }
+    }
+
+    .btn-retry {
+      display: none;
+      margin-top: 14px; padding: 12px 22px;
+      border: none; border-radius: 12px;
+      background: var(--cyan); color: #05121a;
+      font-family: var(--font); font-size: 15px; font-weight: 700;
+      cursor: pointer;
+      pointer-events: auto;   /* the overlay above it does not take taps */
+    }
+    .btn-retry.visible { display: inline-flex; }
     @keyframes pop {
       0% { transform: scale(0.6); opacity: 0.4; }
       50% { transform: scale(1.12); opacity: 1; }
@@ -621,6 +654,7 @@
     </div>
   </div>
   <div class="model-note" data-model-note></div>
+  <button class="btn-retry" data-model-retry>Try again</button>
 
   <button class="btn-begin" id="btn-begin">Begin Tracking →</button>
 </div>
@@ -667,6 +701,8 @@
     <div id="countdown-num" style="display:none"></div>
     <div id="overlay-title">Get into frame</div>
     <div id="overlay-sub">Step back until your whole body — head to ankles — is visible.</div>
+    <div id="load-progress"><div id="load-progress-fill"></div></div>
+    <button class="btn-retry" data-model-retry>Try again</button>
   </div>
 
   <div id="steps-sheet">
@@ -685,6 +721,7 @@
       </div>
     </div>
     <div class="model-note" data-model-note></div>
+    <button class="btn-retry" data-model-retry>Try again</button>
 
     <button class="btn-resume" id="btn-resume">Back to tracking →</button>
   </div>
@@ -1380,7 +1417,7 @@ function startWorker(model) {
   latestResult = null;
   budget.reset();
   currentModel = model;
-  modelStatus = { state: "loading", message: "Starting…" };
+  modelStatus = { state: "loading", message: "Starting…", progress: null };
   if (isTracking) trackPhase = "loading";
   renderModelToggles();
 
@@ -1390,6 +1427,8 @@ function startWorker(model) {
     const msg = e.data;
     if (msg.type === "status") {
       modelStatus = { state: msg.state, message: msg.message || "",
+                      progress: msg.progress ?? null,
+                      retryable: !!msg.retryable,
                       delegate: msg.delegate || modelStatus.delegate };
       workerReady = msg.state === "ready";
       if (msg.state === "ready") {
@@ -1853,8 +1892,13 @@ function startTrackingLoop() {
 
     // ── Waiting on the model ──
     if (trackPhase === "loading") {
-      setOverlay(`loading-${modelStatus.message}`, "Getting the model ready",
+      setOverlay(modelStatus.state === "error" ? "load-error" : "loading",
+                 modelStatus.state === "error" ? "That didn't work"
+                                               : "Getting the model ready",
                  modelStatus.message || "Loading…");
+      // setOverlay only repaints when the state key changes, and the download
+      // message changes on every tick of progress.
+      overlaySub.textContent = modelStatus.message || "Loading…";
       if (ghostOn) drawGhost(ctx, primary(selectedPoseKey), w, h, null, null);
       return;
     }
@@ -2008,11 +2052,33 @@ function startTrackingLoop() {
 // Model picker — both copies of the control share one state
 // ─────────────────────────────────────────────────────────────
 const MODEL_NOTES = {
-  full: "Faster, lighter download (~13 MB). Good on most phones.",
-  heavy: "More accurate landmarks, noticeably slower (~30 MB).",
+  full: "Faster, lighter download (9 MB). Good on most phones.",
+  heavy: "More accurate landmarks, noticeably slower (29 MB).",
 };
 
+const loadProgress = document.getElementById("load-progress");
+const loadProgressFill = document.getElementById("load-progress-fill");
+
+function renderLoadProgress() {
+  const loading = modelStatus.state === "loading";
+  loadProgress.classList.toggle("visible", loading);
+  // A download reports a fraction; the runtime start-up cannot, so it sweeps
+  // rather than pretending to a number it does not have.
+  const known = loading && typeof modelStatus.progress === "number";
+  loadProgress.classList.toggle("unknown", loading && !known);
+  if (known) loadProgressFill.style.width = `${Math.round(modelStatus.progress * 100)}%`;
+
+  document.querySelectorAll("[data-model-retry]").forEach((btn) => {
+    btn.classList.toggle("visible", modelStatus.state === "error");
+  });
+}
+
+document.querySelectorAll("[data-model-retry]").forEach((btn) => {
+  btn.addEventListener("click", () => startWorker(currentModel));
+});
+
 function renderModelToggles() {
+  renderLoadProgress();
   document.querySelectorAll("[data-model-seg] button").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.model === currentModel);
     btn.disabled = modelStatus.state === "loading";
