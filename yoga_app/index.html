@@ -244,6 +244,35 @@
     }
     .tip-icon { font-size: 16px; flex-shrink: 0; }
 
+    /* ── Model picker ── */
+    .model-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin: 22px 0 0;
+    }
+    .model-row .model-label {
+      font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--cyan);
+    }
+    .model-seg {
+      display: flex; padding: 3px; border-radius: 11px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border-glass);
+    }
+    .model-seg button {
+      border: none; background: none; cursor: pointer;
+      font-family: var(--font); font-size: 13px; font-weight: 600;
+      color: var(--text-secondary);
+      padding: 7px 16px; border-radius: 8px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .model-seg button.active { background: var(--cyan); color: #05121a; }
+    .model-note {
+      font-size: 12px; color: var(--text-secondary);
+      margin-top: 8px; line-height: 1.5;
+    }
+    .model-note.busy { color: var(--yellow); }
+
     .btn-begin {
       display: block;
       width: 100%;
@@ -511,6 +540,16 @@
     <h4>Key form tips</h4>
     <div class="guide-tips" id="guide-tips"></div>
   </div>
+
+  <div class="model-row">
+    <span class="model-label">Tracking model</span>
+    <div class="model-seg" data-model-seg>
+      <button data-model="full">Full</button>
+      <button data-model="heavy">Heavy</button>
+    </div>
+  </div>
+  <div class="model-note" data-model-note></div>
+
   <button class="btn-begin" id="btn-begin">Begin Tracking →</button>
 </div>
 
@@ -563,15 +602,23 @@
       <h4>How to do it</h4>
       <div class="guide-steps" id="sheet-steps"></div>
     </div>
+
+    <div class="model-row">
+      <span class="model-label">Tracking model</span>
+      <div class="model-seg" data-model-seg>
+        <button data-model="full">Full</button>
+        <button data-model="heavy">Heavy</button>
+      </div>
+    </div>
+    <div class="model-note" data-model-note></div>
+
     <button class="btn-resume" id="btn-resume">Back to tracking →</button>
   </div>
 </div>
 
 <script type="module">
-import {
-  PoseLandmarker,
-  FilesetResolver,
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
+// MediaPipe is not imported here on purpose — it runs inside pose-worker.js so
+// that WASM inference never blocks this thread. See "Pose worker" below.
 
 // ─────────────────────────────────────────────────────────────
 // Landmark Indices
@@ -599,43 +646,71 @@ const SKELETON = [
 // ─────────────────────────────────────────────────────────────
 // Angle Calculation
 // ─────────────────────────────────────────────────────────────
+/**
+ * Angle at b between ba and bc, in 3D. Measuring in the image plane alone made
+ * every angle depend on where the camera stood — a limb pointing towards the
+ * lens looked bent no matter how straight it was. Including z removes that.
+ */
 function calcAngle(a, b, c) {
-  const ba = [a.x - b.x, a.y - b.y];
-  const bc = [c.x - b.x, c.y - b.y];
-  const dot = ba[0]*bc[0] + ba[1]*bc[1];
-  const magBA = Math.sqrt(ba[0]**2 + ba[1]**2);
-  const magBC = Math.sqrt(bc[0]**2 + bc[1]**2);
+  const ba = [a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0)];
+  const bc = [c.x - b.x, c.y - b.y, (c.z ?? 0) - (b.z ?? 0)];
+  const dot = ba[0]*bc[0] + ba[1]*bc[1] + ba[2]*bc[2];
+  const magBA = Math.sqrt(ba[0]**2 + ba[1]**2 + ba[2]**2);
+  const magBC = Math.sqrt(bc[0]**2 + bc[1]**2 + bc[2]**2);
   let cosAngle = dot / (magBA * magBC + 1e-6);
   cosAngle = Math.max(-1, Math.min(1, cosAngle));
   return Math.acos(cosAngle) * (180 / Math.PI);
 }
 
-function pt(landmarks, name) {
-  const lm = landmarks[LM[name]];
-  return { x: lm.x, y: lm.y };
-}
+// Which three landmarks form each scored joint angle.
+const ANGLE_JOINTS = {
+  left_elbow:     ["left_shoulder", "left_elbow", "left_wrist"],
+  right_elbow:    ["right_shoulder", "right_elbow", "right_wrist"],
+  left_shoulder:  ["left_elbow", "left_shoulder", "left_hip"],
+  right_shoulder: ["right_elbow", "right_shoulder", "right_hip"],
+  left_hip:       ["left_shoulder", "left_hip", "left_knee"],
+  right_hip:      ["right_shoulder", "right_hip", "right_knee"],
+  left_knee:      ["left_hip", "left_knee", "left_ankle"],
+  right_knee:     ["right_hip", "right_knee", "right_ankle"],
+};
 
-function computeAngles(landmarks) {
-  const p = (n) => pt(landmarks, n);
-  return {
-    left_elbow:    calcAngle(p("left_shoulder"), p("left_elbow"), p("left_wrist")),
-    right_elbow:   calcAngle(p("right_shoulder"), p("right_elbow"), p("right_wrist")),
-    left_shoulder: calcAngle(p("left_elbow"), p("left_shoulder"), p("left_hip")),
-    right_shoulder:calcAngle(p("right_elbow"), p("right_shoulder"), p("right_hip")),
-    left_hip:      calcAngle(p("left_shoulder"), p("left_hip"), p("left_knee")),
-    right_hip:     calcAngle(p("right_shoulder"), p("right_hip"), p("right_knee")),
-    left_knee:     calcAngle(p("left_hip"), p("left_knee"), p("left_ankle")),
-    right_knee:    calcAngle(p("right_hip"), p("right_knee"), p("right_ankle")),
-  };
+/**
+ * Joint angles from a landmark array. Prefers MediaPipe's world landmarks:
+ * they are metric and hip-centred, so the angles are anatomical rather than a
+ * projection. Falls back to image landmarks scaled to pixels, which at least
+ * keeps the three axes in comparable units.
+ */
+function computeAngles(world, image, w, h) {
+  let points;
+  if (world) {
+    points = (n) => world[LM[n]];
+  } else {
+    points = (n) => {
+      const lm = image[LM[n]];
+      return { x: lm.x * w, y: lm.y * h, z: (lm.z ?? 0) * w };
+    };
+  }
+
+  const out = {};
+  for (const [joint, [a, b, c]] of Object.entries(ANGLE_JOINTS)) {
+    out[joint] = calcAngle(points(a), points(b), points(c));
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────
 // Yoga Pose Data (templates + guide content)
 // ─────────────────────────────────────────────────────────────
-// `rig` drives the animated demo figure: each entry is the on-screen direction
-// (degrees, 0° = right, 90° = up) of a body segment. The directions are chosen so
-// the drawn figure scores 100% against the pose's own `angles` template — the demo,
-// the target outline and the live scoring all describe the same shape.
+// `rig` drives the animated demo figure: each entry is the direction of a body
+// segment, either `theta` (degrees, 0° = right, 90° = up on screen) or
+// `[theta, phi]` where phi tilts the segment out of the frontal plane, away from
+// the camera. All five of these poses are planar, so every phi here is 0 — which
+// is exactly why their anatomical 3D angles equal the angles of a flat rig.
+//
+// `angles` are true 3D joint angles, measured from MediaPipe's world landmarks,
+// so they no longer depend on where the camera stands. Each target is derived
+// from the rig above it, keeping the demo figure, the target outline and the
+// scoring as descriptions of one single shape.
 const YOGA_POSES = {
   mountain: {
     name: "Mountain Pose",
@@ -657,13 +732,13 @@ const YOGA_POSES = {
     rig: {
       torso: 90,
       arm_left: [-75, -65], arm_right: [-105, -115],
-      leg_left: [-80, -90], leg_right: [-100, -90],
+      leg_left: [-85, -90], leg_right: [-95, -90],
     },
     angles: {
+      left_knee:[175,20], right_knee:[175,20],
+      left_hip:[173,20], right_hip:[173,20],
+      left_shoulder:[17,20], right_shoulder:[17,20],
       left_elbow:[170,20], right_elbow:[170,20],
-      left_shoulder:[15,20], right_shoulder:[15,20],
-      left_hip:[170,20], right_hip:[170,20],
-      left_knee:[170,20], right_knee:[170,20],
     },
   },
   warrior1: {
@@ -685,14 +760,14 @@ const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [80, 95], arm_right: [100, 85],
-      leg_left: [-20, -105], leg_right: [-110, -125],
+      arm_left: [80, 85], arm_right: [100, 95],
+      leg_left: [-20, -105], leg_right: [-110, -105],
     },
     angles: {
-      left_knee:[95,20], right_knee:[165,20],
-      left_hip:[110,25], right_hip:[160,25],
-      left_shoulder:[170,25], right_shoulder:[170,25],
-      left_elbow:[165,20], right_elbow:[165,20],
+      left_knee:[95,22], right_knee:[175,20],
+      left_hip:[108,25], right_hip:[158,25],
+      left_shoulder:[172,25], right_shoulder:[172,25],
+      left_elbow:[175,22], right_elbow:[175,22],
     },
   },
   warrior2: {
@@ -714,14 +789,14 @@ const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [0, -10], arm_right: [180, 190],
-      leg_left: [-10, -95], leg_right: [-130, -115],
+      arm_left: [0, -5], arm_right: [180, 185],
+      leg_left: [-10, -95], leg_right: [-130, -125],
     },
     angles: {
-      left_knee:[95,20], right_knee:[165,20],
-      left_hip:[100,25], right_hip:[140,25],
-      left_shoulder:[90,25], right_shoulder:[90,25],
-      left_elbow:[170,20], right_elbow:[170,20],
+      left_knee:[95,22], right_knee:[175,20],
+      left_hip:[98,25], right_hip:[138,25],
+      left_shoulder:[92,25], right_shoulder:[92,25],
+      left_elbow:[175,20], right_elbow:[175,20],
     },
   },
   tree: {
@@ -743,14 +818,14 @@ const YOGA_POSES = {
     ],
     rig: {
       torso: 90,
-      arm_left: [80, 90], arm_right: [100, 90],
-      leg_left: [-80, -90], leg_right: [170, -70],
+      arm_left: [80, 85], arm_right: [100, 95],
+      leg_left: [-85, -90], leg_right: [-140, -15],
     },
     angles: {
-      left_knee:[170,20], right_knee:[60,30],
-      left_hip:[170,20], right_hip:[80,30],
-      left_shoulder:[170,25], right_shoulder:[170,25],
-      left_elbow:[170,20], right_elbow:[170,20],
+      left_knee:[175,20], right_knee:[55,30],
+      left_hip:[173,20], right_hip:[128,30],
+      left_shoulder:[172,25], right_shoulder:[172,25],
+      left_elbow:[175,20], right_elbow:[175,20],
     },
   },
   triangle: {
@@ -772,14 +847,14 @@ const YOGA_POSES = {
     ],
     rig: {
       torso: 35,
-      arm_left: [-55, -45], arm_right: [125, 135],
-      leg_left: [-60, -50], leg_right: [-120, -140],
+      arm_left: [-55, -50], arm_right: [125, 130],
+      leg_left: [-60, -55], leg_right: [-120, -115],
     },
     angles: {
-      left_knee:[170,20], right_knee:[170,20],
-      left_hip:[100,25], right_hip:[140,25],
-      left_shoulder:[90,25], right_shoulder:[90,25],
-      left_elbow:[170,20], right_elbow:[170,20],
+      left_knee:[175,20], right_knee:[175,20],
+      left_hip:[93,25], right_hip:[157,25],
+      left_shoulder:[92,25], right_shoulder:[92,25],
+      left_elbow:[175,20], right_elbow:[175,20],
     },
   },
 };
@@ -805,36 +880,53 @@ const SEG_DEFAULT = {
   shoulderHalf: 0.06, hipHalf: 0.05, neck: 0.12, head: 0.062,
 };
 
-function dirVec(deg) {
-  const r = deg * Math.PI / 180;
-  return { x: Math.cos(r), y: -Math.sin(r) };   // canvas y grows downward
+/**
+ * A rig entry is `theta`, or `[theta, phi]` to tilt the segment out of the
+ * frontal plane (+phi = away from the camera). Drawing simply drops z, so the
+ * demo figure shows the foreshortening the camera would see, while the joint
+ * angles stay three-dimensional.
+ */
+function dirVec(entry) {
+  const theta = Array.isArray(entry) ? entry[0] : entry;
+  const phi = Array.isArray(entry) ? (entry[1] || 0) : 0;
+  const t = theta * Math.PI / 180, p = phi * Math.PI / 180;
+  return {
+    x: Math.cos(t) * Math.cos(p),
+    y: -Math.sin(t) * Math.cos(p),   // canvas y grows downward
+    z: Math.sin(p),
+  };
 }
+
+const along = (from, dist, dir) => ({
+  x: from.x + dist * dir.x,
+  y: from.y + dist * dir.y,
+  z: (from.z || 0) + dist * dir.z,
+});
 
 function buildReference(rig, len) {
   const SEG = len || SEG_DEFAULT;
-  const hipC = { x: 0.5, y: 0.62 };
+  const hipC = { x: 0.5, y: 0.62, z: 0 };
   const up = dirVec(rig.torso);
-  const shC = { x: hipC.x + SEG.torso * up.x, y: hipC.y + SEG.torso * up.y };
-  const perp = dirVec(rig.torso - 90);   // +perp points to the body's anatomical left
-  const P = { nose: { x: shC.x + SEG.neck * up.x, y: shC.y + SEG.neck * up.y } };
+  const shC = along(hipC, SEG.torso, up);
+  const torsoTheta = Array.isArray(rig.torso) ? rig.torso[0] : rig.torso;
+  const perp = dirVec(torsoTheta - 90);   // +perp points to the body's anatomical left
+  const P = { nose: along(shC, SEG.neck, up) };
 
   for (const [side, sgn] of [["left", 1], ["right", -1]]) {
-    const sh = { x: shC.x + sgn * SEG.shoulderHalf * perp.x, y: shC.y + sgn * SEG.shoulderHalf * perp.y };
-    const hp = { x: hipC.x + sgn * SEG.hipHalf * perp.x,      y: hipC.y + sgn * SEG.hipHalf * perp.y };
+    const sh = along(shC, sgn * SEG.shoulderHalf, perp);
+    const hp = along(hipC, sgn * SEG.hipHalf, perp);
     P[`${side}_shoulder`] = sh;
     P[`${side}_hip`] = hp;
 
     const [thUpper, thFore] = rig[`arm_${side}`];
-    const du = dirVec(thUpper), df = dirVec(thFore);
-    const el = { x: sh.x + SEG.upper * du.x, y: sh.y + SEG.upper * du.y };
+    const el = along(sh, SEG.upper, dirVec(thUpper));
     P[`${side}_elbow`] = el;
-    P[`${side}_wrist`] = { x: el.x + SEG.fore * df.x, y: el.y + SEG.fore * df.y };
+    P[`${side}_wrist`] = along(el, SEG.fore, dirVec(thFore));
 
     const [thThigh, thShin] = rig[`leg_${side}`];
-    const dt = dirVec(thThigh), ds = dirVec(thShin);
-    const kn = { x: hp.x + SEG.thigh * dt.x, y: hp.y + SEG.thigh * dt.y };
+    const kn = along(hp, SEG.thigh, dirVec(thThigh));
     P[`${side}_knee`] = kn;
-    P[`${side}_ankle`] = { x: kn.x + SEG.shin * ds.x, y: kn.y + SEG.shin * ds.y };
+    P[`${side}_ankle`] = along(kn, SEG.shin, dirVec(thShin));
   }
   FIGURE_HEAD.set(P, SEG.head);
   return P;
@@ -948,12 +1040,46 @@ function drawFigure(ctx, P, tf, opts = {}) {
 // ─────────────────────────────────────────────────────────────
 // Pose Matching (single pose)
 // ─────────────────────────────────────────────────────────────
-function matchSinglePose(angles, template) {
+const VIS_THRESHOLD = 0.5;
+
+/**
+ * Landmarks we can actually trust this frame: confidently seen, not a held-over
+ * guess, and inside the frame. Everything else is greyed out rather than scored.
+ */
+function reliableLandmarks(landmarks) {
+  const reliable = new Set();
+  for (const name of Object.keys(LM)) {
+    const lm = landmarks[LM[name]];
+    if (!lm) continue;
+    if (lm.held) continue;
+    if ((lm.visibility ?? 1) < VIS_THRESHOLD) continue;
+    if (lm.x < -0.02 || lm.x > 1.02 || lm.y < -0.02 || lm.y > 1.02) continue;
+    reliable.add(name);
+  }
+  return reliable;
+}
+
+/**
+ * Score only the joints we can see. A joint whose landmarks are off-screen or
+ * occluded is reported as unscored — it neither helps nor hurts the score,
+ * which is what lets tracking carry on with your feet out of shot.
+ */
+function matchSinglePose(angles, template, reliable) {
   const results = {};
+  const unscored = [];
   let correct = 0, total = 0;
 
   for (const [joint, [target, tolerance]] of Object.entries(template)) {
     if (!(joint in angles)) continue;
+
+    if (reliable) {
+      const needed = ANGLE_JOINTS[joint] || [];
+      if (!needed.every(name => reliable.has(name))) {
+        unscored.push(joint);
+        continue;
+      }
+    }
+
     total++;
     const actual = angles[joint];
     const diff = Math.abs(actual - target);
@@ -964,7 +1090,7 @@ function matchSinglePose(angles, template) {
   }
 
   const score = total > 0 ? (correct / total) * 100 : 0;
-  return { score, results };
+  return { score, results, unscored, scored: total };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -973,32 +1099,38 @@ function matchSinglePose(angles, template) {
 const GREEN = "#00e676";
 const RED = "#ff5252";
 const YELLOW = "#ffd740";
+const GREY = "rgba(190, 190, 205, 0.5)";   // seen too poorly to judge
 
-function drawSkeleton(ctx, landmarks, w, h, jointResults, targetPx) {
+function drawSkeleton(ctx, landmarks, w, h, jointResults, targetPx, reliable) {
   const badJoints = new Set();
   for (const [joint, res] of Object.entries(jointResults)) {
     if (!res.ok) badJoints.add(joint);
   }
+  const trusted = (name) => !reliable || reliable.has(name);
 
   ctx.lineWidth = 4; ctx.lineCap = "round";
   for (const [startName, endName] of SKELETON) {
     if (!(startName in LM) || !(endName in LM)) continue;
     const s = landmarks[LM[startName]];
     const e = landmarks[LM[endName]];
+    const unseen = !trusted(startName) || !trusted(endName);
     const isBad = badJoints.has(startName) || badJoints.has(endName);
-    ctx.strokeStyle = isBad ? RED : GREEN;
+    ctx.strokeStyle = unseen ? GREY : (isBad ? RED : GREEN);
+    ctx.setLineDash(unseen ? [6, 7] : []);
     ctx.beginPath();
     ctx.moveTo(s.x * w, s.y * h);
     ctx.lineTo(e.x * w, e.y * h);
     ctx.stroke();
   }
+  ctx.setLineDash([]);
 
   for (const [name, idx] of Object.entries(LM)) {
     const lm = landmarks[idx];
+    const unseen = !trusted(name);
     const isBad = badJoints.has(name);
-    ctx.fillStyle = isBad ? RED : GREEN;
+    ctx.fillStyle = unseen ? GREY : (isBad ? RED : GREEN);
     ctx.beginPath();
-    ctx.arc(lm.x * w, lm.y * h, 6, 0, 2 * Math.PI);
+    ctx.arc(lm.x * w, lm.y * h, unseen ? 4 : 6, 0, 2 * Math.PI);
     ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -1083,8 +1215,8 @@ function scoreLabelFor(score) {
   return "Find the pose";
 }
 
-function updateTrackingUI(poseName, score, jointResults, detected) {
-  if (!detected) {
+function updateTrackingUI(poseName, match, detected) {
+  if (!detected || !match) {
     scoreContainer.classList.remove("visible");
     statusCard.classList.remove("visible");
     correctionsPanel.classList.remove("visible");
@@ -1093,7 +1225,23 @@ function updateTrackingUI(poseName, score, jointResults, detected) {
     return;
   }
 
+  const { score, results: jointResults, unscored } = match;
   noPoseMsg.classList.remove("visible");
+
+  // Too little of the body in view to say anything meaningful.
+  if (match.scored === 0) {
+    scoreContainer.classList.remove("visible");
+    correctionsPanel.classList.remove("visible");
+    perfectGlow.classList.remove("visible");
+    statusCard.classList.add("visible");
+    poseBadge.textContent = `🧘 ${poseName}`;
+    scoreValue.textContent = "—";
+    scoreValue.style.color = "var(--text-secondary)";
+    scoreLabel.textContent = "Can't see enough";
+    scoreLabel.style.color = "var(--text-secondary)";
+    scoreDetail.textContent = "Step back so more of you is in frame";
+    return;
+  }
 
   scoreContainer.classList.add("visible");
   const offset = circumference - (score / 100) * circumference;
@@ -1105,15 +1253,18 @@ function updateTrackingUI(poseName, score, jointResults, detected) {
 
   const aligned = Object.values(jointResults).filter(r => r.ok).length;
   const total = Object.keys(jointResults).length;
+  const hidden = unscored ? unscored.length : 0;
   statusCard.classList.add("visible");
   poseBadge.textContent = score >= 80 ? `✅ ${poseName}` : `🧘 ${poseName}`;
   scoreValue.textContent = `${Math.round(score)}%`;
   scoreValue.style.color = color;
   scoreLabel.textContent = scoreLabelFor(score);
   scoreLabel.style.color = color;
-  scoreDetail.textContent = `${aligned} of ${total} joints aligned`;
+  scoreDetail.textContent = hidden
+    ? `${aligned} of ${total} joints aligned · ${hidden} hidden`
+    : `${aligned} of ${total} joints aligned`;
 
-  perfectGlow.classList.toggle("visible", score >= 95);
+  perfectGlow.classList.toggle("visible", score >= 95 && hidden === 0);
 
   const corrections = [];
   for (const [joint, res] of Object.entries(jointResults)) {
@@ -1331,9 +1482,85 @@ document.getElementById("btn-back-select").addEventListener("click", () => {
 // ─────────────────────────────────────────────────────────────
 // Begin Tracking
 // ─────────────────────────────────────────────────────────────
-let poseLandmarker = null;
+// ─────────────────────────────────────────────────────────────
+// Pose worker
+//
+// MediaPipe lives in a worker; this thread only pumps frames in and draws what
+// comes back. One frame is in flight at a time, so a slow model produces fewer
+// detections rather than a growing backlog.
+// ─────────────────────────────────────────────────────────────
+let poseWorker = null;
+let workerReady = false;
+let frameInFlight = false;
+let latestResult = null;
+let currentModel = "full";
+let modelStatus = { state: "loading", message: "Starting…" };
 
-// framing → countdown → live
+const MODEL_LABELS = { full: "Full", heavy: "Heavy" };
+
+function startWorker(model) {
+  if (poseWorker) poseWorker.terminate();
+
+  workerReady = false;
+  frameInFlight = false;
+  latestResult = null;
+  currentModel = model;
+  modelStatus = { state: "loading", message: "Starting…" };
+  if (isTracking) trackPhase = "loading";
+  renderModelToggles();
+
+  poseWorker = new Worker("pose-worker.js", { type: "module" });
+
+  poseWorker.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === "status") {
+      modelStatus = { state: msg.state, message: msg.message || "" };
+      workerReady = msg.state === "ready";
+      if (msg.state === "ready") {
+        loadStatus.textContent = "Ready!";
+        if (trackPhase === "loading") {
+          trackPhase = "framing";
+          readySince = 0;
+        }
+      } else if (msg.state === "error") {
+        loadStatus.textContent = `Error: ${msg.message}`;
+      } else {
+        loadStatus.textContent = msg.message;
+      }
+      renderModelToggles();
+    } else if (msg.type === "result") {
+      latestResult = msg;
+      frameInFlight = false;
+    }
+  };
+
+  poseWorker.onerror = (err) => {
+    modelStatus = { state: "error", message: err.message || "Worker failed to start" };
+    frameInFlight = false;
+    renderModelToggles();
+  };
+
+  poseWorker.postMessage({ type: "init", model });
+}
+
+/** Hand the worker one video frame, if it isn't still chewing on the last. */
+function sendFrameToWorker() {
+  if (!workerReady || frameInFlight || video.readyState < 2) return;
+  frameInFlight = true;
+  createImageBitmap(video)
+    .then(bitmap => {
+      poseWorker.postMessage(
+        { type: "frame", bitmap, timestamp: performance.now() }, [bitmap]);
+    })
+    .catch(() => { frameInFlight = false; });
+}
+
+function setModel(model) {
+  if (model === currentModel) return;
+  startWorker(model);
+}
+
+// loading → framing → countdown → live
 let trackPhase = "framing";
 let countdownStart = 0;
 let readySince = 0;
@@ -1346,17 +1573,15 @@ const countdownNum = document.getElementById("countdown-num");
 const stepsSheet = document.getElementById("steps-sheet");
 const btnGhost = document.getElementById("btn-ghost");
 
-const FRAME_CHECK = ["nose", "left_shoulder", "right_shoulder", "left_hip", "right_hip",
-                     "left_knee", "right_knee", "left_ankle", "right_ankle"];
+const TORSO = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"];
 
-/** True when the whole body — head through ankles — is inside the frame. */
-function isFullBodyVisible(landmarks) {
-  return FRAME_CHECK.every(name => {
-    const lm = landmarks[LM[name]];
-    if (!lm) return false;
-    if ((lm.visibility ?? 1) < 0.5) return false;
-    return lm.x > 0.02 && lm.x < 0.98 && lm.y > 0.02 && lm.y < 0.99;
-  });
+/**
+ * Tracking needs the torso and nothing more. Everything else — ankles out of
+ * shot in a small room, a wrist behind your back — is greyed out and left
+ * unscored instead of blocking the session.
+ */
+function torsoVisible(reliable) {
+  return TORSO.every(name => reliable.has(name));
 }
 
 let overlayState = "";
@@ -1385,9 +1610,11 @@ function hideOverlay() {
 }
 
 function resetTrackPhase() {
-  trackPhase = "framing";
+  trackPhase = workerReady ? "framing" : "loading";
   readySince = 0;
+  latestResult = null;
   resetBodyLengths();
+  if (poseWorker && workerReady) poseWorker.postMessage({ type: "reset" });
   overlayState = "";
   trackOverlay.classList.remove("hidden", "fading");
   updateTrackingUI("", 0, {}, false);
@@ -1444,16 +1671,22 @@ const GHOST_NEUTRAL = "rgba(0, 229, 255, 0.85)";
  * is out of tolerance, green where it's within it. When every scored joint is
  * correct the whole figure — torso, neck and head included — goes green.
  */
-function ghostSegColor(jointResults) {
+function ghostSegColor(jointResults, reliable) {
   if (!jointResults) return null;
   const scored = Object.entries(jointResults);
   if (!scored.length) return null;
 
-  if (scored.every(([, r]) => r.ok)) return () => GREEN;
+  const unseen = (s, e) => reliable && ((s in LM && !reliable.has(s)) ||
+                                        (e in LM && !reliable.has(e)));
+
+  if (scored.every(([, r]) => r.ok)) {
+    return (s, e) => (unseen(s, e) ? GREY : GREEN);
+  }
 
   const bad = new Set(scored.filter(([, r]) => !r.ok).map(([j]) => j));
   const good = new Set(scored.filter(([, r]) => r.ok).map(([j]) => j));
   return (s, e) => {
+    if (unseen(s, e)) return GREY;
     if (bad.has(s) || bad.has(e)) return RED;
     if (good.has(s) || good.has(e)) return GREEN;
     return GHOST_NEUTRAL;
@@ -1489,7 +1722,7 @@ function buildTargetFigure(key, landmarks, w, h) {
   return placed;
 }
 
-function drawGhost(ctx, key, w, h, landmarks, jointResults, targetPx) {
+function drawGhost(ctx, key, w, h, landmarks, jointResults, targetPx, reliable) {
   let figure, tf;
 
   if (landmarks) {
@@ -1501,7 +1734,7 @@ function drawGhost(ctx, key, w, h, landmarks, jointResults, targetPx) {
     tf = fitFigure(figure, w, h, Math.min(w, h) * 0.1);
   }
 
-  const segColor = ghostSegColor(jointResults);
+  const segColor = ghostSegColor(jointResults, reliable);
   drawFigure(ctx, figure, tf, {
     color: GHOST_NEUTRAL,
     segColor,
@@ -1515,9 +1748,9 @@ function drawGhost(ctx, key, w, h, landmarks, jointResults, targetPx) {
 document.getElementById("btn-begin").addEventListener("click", async () => {
   stopDemoLoop();
   showScreen("screen-track");
+  isTracking = true;          // so resetTrackPhase can park us on "loading"
   resetTrackPhase();
   await startCamera();
-  isTracking = true;
   startTrackingLoop();
 });
 
@@ -1549,9 +1782,14 @@ document.getElementById("btn-resume").addEventListener("click", () => {
   stepsSheet.classList.remove("visible");
 });
 
+// ─────────────────────────────────────────────────────────────
+// Render loop
+//
+// Inference happens in the worker. This loop only ships frames to it and paints
+// whatever came back last, so a slow model drops the detection rate without
+// dropping the frame rate of the overlay.
+// ─────────────────────────────────────────────────────────────
 function startTrackingLoop() {
-  let lastTimestamp = 0;
-
   function renderFrame(timestamp) {
     if (!isTracking) return;
     animFrameId = requestAnimationFrame(renderFrame);
@@ -1563,67 +1801,76 @@ function startTrackingLoop() {
       canvas.height = video.videoHeight;
     }
 
+    sendFrameToWorker();
+
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    if (timestamp !== lastTimestamp && poseLandmarker) {
-      const result = poseLandmarker.detectForVideo(video, timestamp);
-      lastTimestamp = timestamp;
+    const landmarks = latestResult && latestResult.detected ? latestResult.landmarks : null;
+    const world = landmarks ? latestResult.world : null;
+    const pose = YOGA_POSES[selectedPoseKey];
+    const reliable = landmarks ? reliableLandmarks(landmarks) : null;
 
-      const landmarks = result.landmarks?.length ? result.landmarks[0] : null;
-      const pose = YOGA_POSES[selectedPoseKey];
+    // ── Waiting on the model ──
+    if (trackPhase === "loading") {
+      setOverlay(`loading-${modelStatus.message}`, "Getting the model ready",
+                 modelStatus.message || "Loading…");
+      if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
+      return;
+    }
 
-      // ── Get ready: hold the target outline until they're framed, then count in ──
-      if (trackPhase !== "live") {
-        const ready = landmarks && isFullBodyVisible(landmarks);
+    // ── Get ready: hold the outline until the torso is in shot, then count in ──
+    if (trackPhase !== "live") {
+      const ready = reliable && torsoVisible(reliable);
 
-        if (!ready) {
-          readySince = 0;
-          trackPhase = "framing";
-          setOverlay(landmarks ? "framing-seen" : "framing-none", "Get into frame",
-            landmarks ? "Step back until your whole body — head to ankles — is visible."
-                      : "Stand where the camera can see you, head to ankles.");
-        } else {
-          if (!readySince) readySince = timestamp;
-          if (trackPhase === "framing" && timestamp - readySince > 500) {
-            trackPhase = "countdown";
-            countdownStart = timestamp;
-          }
-          if (trackPhase === "countdown") {
-            const remaining = 3 - Math.floor((timestamp - countdownStart) / 1000);
-            if (remaining <= 0) {
-              trackPhase = "live";
-              hideOverlay();
-            } else {
-              setOverlay("countdown", "Match the outline",
-                `Moving into ${pose.name}`, remaining);
-            }
-          }
-        }
-
-        if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, landmarks);
-        if (landmarks && trackPhase !== "live") {
-          // dimmed skeleton — no corrections until tracking actually starts
-          ctx.globalAlpha = 0.35;
-          drawSkeleton(ctx, landmarks, w, h, {});
-          ctx.globalAlpha = 1;
-        }
-        return;
-      }
-
-      // ── Live: score the pose and show corrections ──
-      if (landmarks) {
-        const angles = computeAngles(landmarks);
-        const { score, results } = matchSinglePose(angles, pose.angles);
-
-        const target = buildTargetFigure(selectedPoseKey, landmarks, w, h);
-        if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, landmarks, results, target);
-        drawSkeleton(ctx, landmarks, w, h, results, target);
-        updateTrackingUI(pose.name, score, results, true);
+      if (!ready) {
+        readySince = 0;
+        trackPhase = "framing";
+        setOverlay(landmarks ? "framing-seen" : "framing-none", "Get into frame",
+          landmarks ? "Turn so the camera can see your shoulders and hips."
+                    : "Stand where the camera can see you.");
       } else {
-        if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
-        updateTrackingUI("", 0, {}, false);
+        if (!readySince) readySince = timestamp;
+        if (trackPhase === "framing" && timestamp - readySince > 500) {
+          trackPhase = "countdown";
+          countdownStart = timestamp;
+        }
+        if (trackPhase === "countdown") {
+          const remaining = 3 - Math.floor((timestamp - countdownStart) / 1000);
+          if (remaining <= 0) {
+            trackPhase = "live";
+            hideOverlay();
+          } else {
+            setOverlay("countdown", "Match the outline",
+              `Moving into ${pose.name}`, remaining);
+          }
+        }
       }
+
+      if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, landmarks, null, null, reliable);
+      if (landmarks && trackPhase !== "live") {
+        // dimmed skeleton — no corrections until tracking actually starts
+        ctx.globalAlpha = 0.35;
+        drawSkeleton(ctx, landmarks, w, h, {}, null, reliable);
+        ctx.globalAlpha = 1;
+      }
+      return;
+    }
+
+    // ── Live: score the pose and show corrections ──
+    if (landmarks) {
+      const angles = computeAngles(world, landmarks, w, h);
+      const match = matchSinglePose(angles, pose.angles, reliable);
+
+      const target = buildTargetFigure(selectedPoseKey, landmarks, w, h);
+      if (ghostOn) {
+        drawGhost(ctx, selectedPoseKey, w, h, landmarks, match.results, target, reliable);
+      }
+      drawSkeleton(ctx, landmarks, w, h, match.results, target, reliable);
+      updateTrackingUI(pose.name, match, true);
+    } else {
+      if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
+      updateTrackingUI("", null, false);
     }
   }
 
@@ -1631,39 +1878,49 @@ function startTrackingLoop() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Model picker — both copies of the control share one state
+// ─────────────────────────────────────────────────────────────
+const MODEL_NOTES = {
+  full: "Faster, lighter download (~13 MB). Good on most phones.",
+  heavy: "More accurate landmarks, noticeably slower (~30 MB).",
+};
+
+function renderModelToggles() {
+  document.querySelectorAll("[data-model-seg] button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.model === currentModel);
+    btn.disabled = modelStatus.state === "loading";
+  });
+  document.querySelectorAll("[data-model-note]").forEach(note => {
+    const busy = modelStatus.state === "loading";
+    note.classList.toggle("busy", busy);
+    note.textContent = modelStatus.state === "error"
+      ? `Model failed to load: ${modelStatus.message}`
+      : busy ? (modelStatus.message || "Loading…")
+             : MODEL_NOTES[currentModel];
+  });
+}
+
+document.querySelectorAll("[data-model-seg] button").forEach(btn => {
+  btn.addEventListener("click", () => setModel(btn.dataset.model));
+});
+
+// ─────────────────────────────────────────────────────────────
 // Init
 // ─────────────────────────────────────────────────────────────
 const loadStatus = document.getElementById("load-status");
 
-async function init() {
-  loadStatus.textContent = "Loading vision runtime...";
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
-  );
-
-  loadStatus.textContent = "Downloading pose model (~13 MB)...";
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numPoses: 1,
-  });
-
-  loadStatus.textContent = "Ready!";
-
+function init() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 
+  // The model downloads in the background: browsing poses and reading the
+  // walkthrough need no landmarker, so there's nothing to wait for here.
+  startWorker(currentModel);
   showScreen("screen-select");
 }
 
-init().catch(err => {
-  loadStatus.textContent = `Error: ${err.message}`;
-  console.error(err);
-});
+init();
 </script>
 </body>
 </html>
