@@ -132,13 +132,23 @@ export function reliableLandmarks(landmarks) {
 // Pose Matching (single pose)
 // ─────────────────────────────────────────────────────────────
 /**
- * Score only the joints we can see. A joint whose landmarks are off-screen or
- * occluded is reported as unscored — it neither helps nor hurts the score,
- * which is what lets tracking carry on with your feet out of shot.
+ * Score only the joints we can actually judge. A joint is set aside for one of
+ * two different reasons, and the difference matters to the user:
+ *
+ *   unscored   its landmarks are off-screen or occluded — "step back"
+ *   uncertain  it is pointing down the camera axis — "turn side-on"
+ *
+ * Neither helps nor hurts the score. That is what lets tracking carry on with
+ * your feet out of shot, and what stops the app inventing a fault out of the
+ * one coordinate it cannot see.
+ *
+ * opts: { reliable: Set<string>, measurability: object }
  */
-export function matchSinglePose(angles, template, reliable) {
+export function matchSinglePose(angles, template, opts = {}) {
+  const { reliable = null, measurability = null } = opts;
   const results = {};
   const unscored = [];
+  const uncertain = [];
   let correct = 0, total = 0;
 
   for (const [joint, [target, tolerance]] of Object.entries(template)) {
@@ -152,6 +162,11 @@ export function matchSinglePose(angles, template, reliable) {
       }
     }
 
+    if (measurability && measurability[joint] && !measurability[joint].measurable) {
+      uncertain.push(joint);
+      continue;
+    }
+
     total++;
     const actual = angles[joint];
     const diff = Math.abs(actual - target);
@@ -162,7 +177,163 @@ export function matchSinglePose(angles, template, reliable) {
   }
 
   const score = total > 0 ? (correct / total) * 100 : 0;
-  return { score, results, unscored, scored: total };
+  return { score, results, unscored, uncertain, scored: total };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Camera geometry
+//
+// World landmarks are metric and hip-centred, but their axes are the camera's:
+// x right, y down, z away from the lens. So the pose is described in a frame
+// that moves when the user turns, even though the body has not changed shape.
+//
+// Joint angles are already immune to that — an angle is rotation-invariant, and
+// tests/scoring.test.js proves ours is, exactly, for any rigid turn. What is
+// *not* immune is the depth axis itself: MediaPipe regresses z from a single
+// RGB image, and it is much the least certain of the three. A limb lying along
+// the camera axis has its direction decided almost entirely by that number.
+//
+// That is the real view-dependence, and it cannot be rotated away. What can be
+// done is to notice it, and to say "can't tell" instead of scoring a guess.
+// ─────────────────────────────────────────────────────────────
+
+export const v3 = {
+  sub:   (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: (a.z ?? 0) - (b.z ?? 0) }),
+  scale: (a, k) => ({ x: a.x * k, y: a.y * k, z: (a.z ?? 0) * k }),
+  dot:   (a, b) => a.x * b.x + a.y * b.y + (a.z ?? 0) * (b.z ?? 0),
+  cross: (a, b) => ({
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  }),
+  len:  (a) => Math.hypot(a.x, a.y, a.z ?? 0),
+  unit: (a) => { const n = Math.hypot(a.x, a.y, a.z ?? 0); return n < 1e-12 ? { x: 0, y: 0, z: 0 } : { x: a.x / n, y: a.y / n, z: (a.z ?? 0) / n }; },
+  mid:  (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z ?? 0) + (b.z ?? 0)) / 2 }),
+};
+
+/**
+ * An orthonormal frame rigidly attached to the torso, built from the hip and
+ * shoulder vectors:
+ *
+ *   spine    hips → shoulders, up the body
+ *   lateral  right hip → left hip, made perpendicular to the spine
+ *   forward  out of the chest
+ *
+ * `facing` is how squarely the chest points at the lens: 1 when the user is
+ * head-on (or backs-on — the camera cannot tell, and for measurability it does
+ * not matter), 0 when they are edge-on. `turnDegrees` is the same thing in
+ * degrees off-axis, which is what you would say out loud to a person.
+ *
+ * A body whose hips have collapsed onto each other yields a zero frame, which
+ * reads as fully edge-on — the safe direction to fail in, since it makes the
+ * app say "I can't see this" rather than score noise.
+ */
+export function bodyFrame(world) {
+  const P = (n) => world[LM[n]];
+  const hipC = v3.mid(P("left_hip"), P("right_hip"));
+  const shC  = v3.mid(P("left_shoulder"), P("right_shoulder"));
+
+  const spine = v3.unit(v3.sub(shC, hipC));
+  const hipAxis = v3.unit(v3.sub(P("left_hip"), P("right_hip")));
+  // Gram-Schmidt: the hip axis is not quite perpendicular to the spine on a
+  // real body, and the frame has to be orthonormal to be a rotation.
+  const lateral = v3.unit(v3.sub(hipAxis, v3.scale(spine, v3.dot(hipAxis, spine))));
+  const forward = v3.unit(v3.cross(lateral, spine));
+
+  const facing = Math.min(1, Math.abs(forward.z));
+  return {
+    origin: hipC, spine, lateral, forward, facing,
+    turnDegrees: Math.acos(facing) * 180 / Math.PI,
+  };
+}
+
+/**
+ * Landmarks re-expressed in the body frame: x along the body's lateral axis, y
+ * up the spine, z out of the chest, origin at the hips.
+ *
+ * Deliberately NOT part of the scoring path. Joint angles are rotation-
+ * invariant, so scoring them here would produce bit-identical numbers at more
+ * cost — the brief's "rotate into a body frame and score in it" is a no-op for
+ * angles specifically, and pretending otherwise would be theatre. It is here
+ * because anything that is *not* an angle — a segment's direction relative to
+ * the hips, say — needs this frame to be comparable between users, and that is
+ * the natural next thing to score.
+ */
+export function toBodyFrame(world, frame) {
+  const f = frame || bodyFrame(world);
+  return world.map((p) => {
+    const d = v3.sub(p, f.origin);
+    return { ...p, x: v3.dot(d, f.lateral), y: v3.dot(d, f.spine), z: v3.dot(d, f.forward) };
+  });
+}
+
+// A segment more than this much aligned with the camera axis has its direction
+// decided mostly by the depth estimate, which is the one number a single RGB
+// camera does not really know. Angles built on such a segment are not
+// measurements.
+//
+// 0.65 is ~49° off the camera axis, and it is chosen from the requirement
+// rather than from taste: the brief asks that a correct pose score the same
+// head-on and at 30°, and a limb held straight out to the side is sin(30°) =
+// 0.50 aligned with the camera axis at 30° of turn. 0.65 clears that with room
+// to spare and starts excluding frontal-plane joints from about 40° of turn,
+// which is where their depth genuinely stops being resolvable.
+export const AXIS_LIMIT = 0.65;
+
+// Past this much turn the torso itself is edge-on and the user should be told
+// to turn, rather than shown a score built out of whatever survived.
+export const TURN_LIMIT_DEGREES = 55;
+
+/**
+ * Per joint: how much of its angle is being read off the camera's depth axis,
+ * and whether that leaves anything worth scoring.
+ *
+ * The obvious test — take each segment's z share directly — has a hole in it.
+ * A monocular landmarker's characteristic failure is to *compress* depth on a
+ * turned body, and a compressed z share looks small. The evidence of the error
+ * is destroyed by the error. Measured straight, a Triangle held 80° off-axis
+ * reports every joint as comfortably measurable and then scores three of them
+ * wrong.
+ *
+ * So the depth component is reconstructed instead, from the two things that
+ * survive: the body frame (hips and shoulders, which come from x and y) and
+ * the turn angle derived from it. The camera axis expressed in body
+ * coordinates is sin(turn) along the lateral axis plus cos(turn) along the
+ * forward axis, so
+ *
+ *     along-camera = sin(turn)·(v·lateral) + cos(turn)·(v·forward)
+ *
+ * At turn = 0 this is exactly v·forward — the naive z share, which is right
+ * when the user faces the lens. At turn = 90° it becomes v·lateral, computed
+ * from the axes the camera actually resolves.
+ *
+ * What falls out is anatomically the right answer: turning side-on destroys
+ * the body's frontal plane and preserves its sagittal one. An arm held out to
+ * the side becomes unjudgeable; a bent knee becomes *easier* to judge, which
+ * is why a physio films a squat from the side.
+ */
+export function jointMeasurability(world, frame) {
+  const f = frame || bodyFrame(world);
+  const cosTurn = f.facing;
+  const sinTurn = Math.sqrt(Math.max(0, 1 - f.facing * f.facing));
+
+  const depthShare = (v) => {
+    const n = v3.len(v);
+    if (n < 1e-9) return 1;   // a collapsed segment tells us nothing
+    const alongCamera = sinTurn * v3.dot(v, f.lateral) + cosTurn * v3.dot(v, f.forward);
+    return Math.abs(alongCamera) / n;
+  };
+
+  const out = {};
+  for (const [joint, [a, b, c]] of Object.entries(ANGLE_JOINTS)) {
+    const pb = world[LM[b]];
+    const share = Math.max(
+      depthShare(v3.sub(world[LM[a]], pb)),
+      depthShare(v3.sub(world[LM[c]], pb)),
+    );
+    out[joint] = { depthShare: share, measurable: share <= AXIS_LIMIT };
+  }
+  return out;
 }
 
 /**

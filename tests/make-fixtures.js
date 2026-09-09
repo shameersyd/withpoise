@@ -30,10 +30,17 @@ import { YOGA_POSES, CORRECTION_TIPS } from "../yoga_app/poses.js";
 // numbers look like the metric world landmarks they stand in for.
 const WORLD_SCALE = 1.9;
 
-// How far off-axis the `edgeOn` variant stands, and how much of the depth axis
-// a monocular regressor loses at that angle.
+// How far off-axis the turned variants stand. Depth loss grows with the turn —
+// a body square to the lens gives the landmarker plenty to work with, a body
+// edge-on gives it almost nothing — so the compression is interpolated by
+// sin(turn) between none at all and DEPTH_COMPRESSION at EDGE_ON_DEGREES.
+const TURNED_DEGREES = 30;
 const EDGE_ON_DEGREES = 80;
 const DEPTH_COMPRESSION = 0.4;
+
+const compressionAt = (deg) =>
+  1 - (1 - DEPTH_COMPRESSION) *
+      Math.sin(deg * Math.PI / 180) / Math.sin(EDGE_ON_DEGREES * Math.PI / 180);
 
 // Each pose's straight-leg fault: bend the shin away from the thigh, which
 // changes that knee's angle and nothing else — the hip angle is measured from
@@ -129,6 +136,15 @@ function variant(P, note, opts = {}) {
   };
 }
 
+/** A correctly held pose seen from `deg` off-axis, depth loss and all. */
+function turnedVariant(P, deg, note) {
+  const factor = compressionAt(deg);
+  return variant(
+    compressDepth(rotateAboutSpine(P, deg), factor),
+    note + ` Depth compressed to ${factor.toFixed(2)}×.`,
+    { meta: { turnedDegrees: deg, depthCompression: Number(factor.toFixed(4)) } });
+}
+
 /** A deep-enough copy of a rig to bend one segment in. */
 const cloneRig = (rig) => JSON.parse(JSON.stringify(rig));
 
@@ -170,12 +186,13 @@ function build(key) {
             },
         } }),
 
-      edgeOn: variant(
-        compressDepth(rotateAboutSpine(correct, EDGE_ON_DEGREES), DEPTH_COMPRESSION),
-        `Correct, but turned ${EDGE_ON_DEGREES}° off-axis with the depth axis ` +
-        `compressed to ${DEPTH_COMPRESSION}× — a model of what a monocular ` +
-        `landmarker loses on a body edge-on to the camera.`,
-        { meta: { turnedDegrees: EDGE_ON_DEGREES, depthCompression: DEPTH_COMPRESSION } }),
+      turned: turnedVariant(correct, TURNED_DEGREES,
+        `Correct, and standing ${TURNED_DEGREES}° off-axis — the angle the brief ` +
+        `says must score the same as head-on.`),
+
+      edgeOn: turnedVariant(correct, EDGE_ON_DEGREES,
+        `Correct, but turned ${EDGE_ON_DEGREES}° off-axis — a model of what a ` +
+        `monocular landmarker loses on a body nearly edge-on to the camera.`),
 
       partial: variant(correct,
         "Correct, but knees and ankles are below the frame and barely visible.",

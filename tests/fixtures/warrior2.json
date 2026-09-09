@@ -813,8 +813,413 @@
         }
       ]
     },
+    "turned": {
+      "note": "Correct, and standing 30° off-axis — the angle the brief says must score the same as head-on. Depth compressed to 0.70×.",
+      "turnedDegrees": 30,
+      "depthCompression": 0.6954,
+      "image": [
+        {
+          "x": 0.5,
+          "y": 0.24,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.55196,
+          "y": 0.36,
+          "z": -0.02086,
+          "visibility": 1
+        },
+        {
+          "x": 0.44804,
+          "y": 0.36,
+          "z": 0.02086,
+          "visibility": 1
+        },
+        {
+          "x": 0.66887,
+          "y": 0.36,
+          "z": -0.0678,
+          "visibility": 1
+        },
+        {
+          "x": 0.33113,
+          "y": 0.36,
+          "z": 0.0678,
+          "visibility": 1
+        },
+        {
+          "x": 0.78534,
+          "y": 0.37177,
+          "z": -0.11456,
+          "visibility": 1
+        },
+        {
+          "x": 0.21466,
+          "y": 0.37177,
+          "z": 0.11456,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.5433,
+          "y": 0.62,
+          "z": -0.01738,
+          "visibility": 1
+        },
+        {
+          "x": 0.4567,
+          "y": 0.62,
+          "z": 0.01738,
+          "visibility": 1
+        },
+        {
+          "x": 0.71387,
+          "y": 0.65473,
+          "z": -0.08587,
+          "visibility": 1
+        },
+        {
+          "x": 0.34536,
+          "y": 0.77321,
+          "z": 0.06208,
+          "visibility": 1
+        },
+        {
+          "x": 0.69878,
+          "y": 0.85397,
+          "z": -0.0798,
+          "visibility": 1
+        },
+        {
+          "x": 0.24602,
+          "y": 0.93704,
+          "z": 0.10197,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ],
+      "world": [
+        {
+          "x": 0,
+          "y": -0.722,
+          "z": 0,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.09873,
+          "y": -0.494,
+          "z": -0.03964,
+          "visibility": 1
+        },
+        {
+          "x": -0.09873,
+          "y": -0.494,
+          "z": 0.03964,
+          "visibility": 1
+        },
+        {
+          "x": 0.32086,
+          "y": -0.494,
+          "z": -0.12882,
+          "visibility": 1
+        },
+        {
+          "x": -0.32086,
+          "y": -0.494,
+          "z": 0.12882,
+          "visibility": 1
+        },
+        {
+          "x": 0.54215,
+          "y": -0.47164,
+          "z": -0.21766,
+          "visibility": 1
+        },
+        {
+          "x": -0.54215,
+          "y": -0.47164,
+          "z": 0.21766,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0.08227,
+          "y": 0,
+          "z": -0.03303,
+          "visibility": 1
+        },
+        {
+          "x": -0.08227,
+          "y": 0,
+          "z": 0.03303,
+          "visibility": 1
+        },
+        {
+          "x": 0.40636,
+          "y": 0.06599,
+          "z": -0.16314,
+          "visibility": 1
+        },
+        {
+          "x": -0.29381,
+          "y": 0.2911,
+          "z": 0.11796,
+          "visibility": 1
+        },
+        {
+          "x": 0.37768,
+          "y": 0.44454,
+          "z": -0.15163,
+          "visibility": 1
+        },
+        {
+          "x": -0.48257,
+          "y": 0.60237,
+          "z": 0.19374,
+          "visibility": 1
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "visibility": 0
+        }
+      ]
+    },
     "edgeOn": {
-      "note": "Correct, but turned 80° off-axis with the depth axis compressed to 0.4× — a model of what a monocular landmarker loses on a body edge-on to the camera.",
+      "note": "Correct, but turned 80° off-axis — a model of what a monocular landmarker loses on a body nearly edge-on to the camera. Depth compressed to 0.40×.",
       "turnedDegrees": 80,
       "depthCompression": 0.4,
       "image": [

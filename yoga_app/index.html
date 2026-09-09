@@ -626,6 +626,7 @@
 // the session state.
 import {
   LM, SKELETON, computeAngles, reliableLandmarks, matchSinglePose, correctionsFor,
+  bodyFrame, jointMeasurability, TURN_LIMIT_DEGREES,
   buildReference, headRadius, setHeadRadius,
 } from "./pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
@@ -863,9 +864,12 @@ function updateTrackingUI(poseName, match, detected) {
   }
 
   const { score, results: jointResults, unscored } = match;
+  const uncertain = match.uncertain || [];
+  const turned = (match.turnDegrees || 0) > TURN_LIMIT_DEGREES;
   noPoseMsg.classList.remove("visible");
 
-  // Too little of the body in view to say anything meaningful.
+  // Too little of the body in view — or too little of it facing the lens — to
+  // say anything meaningful.
   if (match.scored === 0) {
     scoreContainer.classList.remove("visible");
     correctionsPanel.classList.remove("visible");
@@ -874,9 +878,11 @@ function updateTrackingUI(poseName, match, detected) {
     poseBadge.textContent = `🧘 ${poseName}`;
     scoreValue.textContent = "—";
     scoreValue.style.color = "var(--text-secondary)";
-    scoreLabel.textContent = "Can't see enough";
+    scoreLabel.textContent = turned ? "Turn towards the camera" : "Can't see enough";
     scoreLabel.style.color = "var(--text-secondary)";
-    scoreDetail.textContent = "Step back so more of you is in frame";
+    scoreDetail.textContent = turned
+      ? "You're side-on — from here the camera can't judge your angles"
+      : "Step back so more of you is in frame";
     return;
   }
 
@@ -891,17 +897,24 @@ function updateTrackingUI(poseName, match, detected) {
   const aligned = Object.values(jointResults).filter(r => r.ok).length;
   const total = Object.keys(jointResults).length;
   const hidden = unscored ? unscored.length : 0;
+  const unsure = uncertain.length;
   statusCard.classList.add("visible");
   poseBadge.textContent = score >= 80 ? `✅ ${poseName}` : `🧘 ${poseName}`;
   scoreValue.textContent = `${Math.round(score)}%`;
   scoreValue.style.color = color;
   scoreLabel.textContent = scoreLabelFor(score);
   scoreLabel.style.color = color;
-  scoreDetail.textContent = hidden
-    ? `${aligned} of ${total} joints aligned · ${hidden} hidden`
-    : `${aligned} of ${total} joints aligned`;
+  // Hidden and can't-tell are different problems with different remedies, so
+  // they get different words. Turning is the more actionable of the two, so it
+  // wins the line when both apply.
+  const asides = [];
+  if (unsure) asides.push(`${unsure} facing away`);
+  if (hidden) asides.push(`${hidden} hidden`);
+  scoreDetail.textContent = turned && unsure
+    ? `${aligned} of ${total} judged — turn to face the camera`
+    : [`${aligned} of ${total} joints aligned`, ...asides].join(" · ");
 
-  perfectGlow.classList.toggle("visible", score >= 95 && hidden === 0);
+  perfectGlow.classList.toggle("visible", score >= 95 && hidden === 0 && unsure === 0);
 
   const corrections = correctionsFor(jointResults, CORRECTION_TIPS);
 
@@ -1486,13 +1499,27 @@ function startTrackingLoop() {
     // ── Live: score the pose and show corrections ──
     if (landmarks) {
       const angles = computeAngles(world, landmarks, w, h);
-      const match = matchSinglePose(angles, pose.angles, reliable);
+
+      // How square the user is to the lens, and which joints that leaves
+      // unmeasurable. Both need world landmarks; without them we score every
+      // joint as before rather than silently marking the whole body uncertain.
+      const frame = world ? bodyFrame(world) : null;
+      const measurability = world ? jointMeasurability(world) : null;
+
+      const match = matchSinglePose(angles, pose.angles, { reliable, measurability });
+      match.turnDegrees = frame ? frame.turnDegrees : 0;
+
+      // A joint we cannot measure is drawn like one we cannot see: greyed and
+      // dashed, never red. Being told to fix a joint the camera can't judge is
+      // worse than being told nothing.
+      const judged = new Set(reliable);
+      for (const joint of match.uncertain) judged.delete(joint);
 
       const target = buildTargetFigure(selectedPoseKey, landmarks, w, h);
       if (ghostOn) {
-        drawGhost(ctx, selectedPoseKey, w, h, landmarks, match.results, target, reliable);
+        drawGhost(ctx, selectedPoseKey, w, h, landmarks, match.results, target, judged);
       }
-      drawSkeleton(ctx, landmarks, w, h, match.results, target, reliable);
+      drawSkeleton(ctx, landmarks, w, h, match.results, target, judged);
       updateTrackingUI(pose.name, match, true);
     } else {
       if (ghostOn) drawGhost(ctx, selectedPoseKey, w, h, null, null);
