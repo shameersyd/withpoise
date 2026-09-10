@@ -22,6 +22,10 @@ import sys
 PORT = 8443
 PORT_ATTEMPTS = 12
 
+# How long a connection may sit without saying anything before it is dropped.
+# Browsers open speculative connections and abandon them constantly.
+IDLE_TIMEOUT_SECONDS = 20
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIR = os.path.join(HERE, "yoga_app")
 CERT_FILE = os.path.join(HERE, ".self_signed_cert.pem")
@@ -103,6 +107,52 @@ def generate_cert():
     print("✅ Certificate generated.")
 
 
+class TLSServer(http.server.ThreadingHTTPServer):
+    """
+    A threaded HTTPS server that a browser cannot wedge.
+
+    Two things here matter, and the usual recipe gets both wrong.
+
+    It is **threaded**. The single-threaded server handles one connection at a
+    time, and a browser does not open one connection at a time.
+
+    And the TLS handshake happens in the connection's own thread rather than in
+    the accept loop. Wrapping the listening socket — which is what every
+    snippet on the internet does, and what this file used to do — performs the
+    handshake inside accept(), so a client that opens a socket and then says
+    nothing blocks every other request on the server. Chrome opens exactly
+    those, speculatively, all the time. The symptom is a server that looks
+    perfectly healthy in the terminal and serves nobody.
+    """
+
+    daemon_threads = True       # so Ctrl+C does not wait on open connections
+
+    def __init__(self, address, handler, context):
+        self.tls_context = context
+        super().__init__(address, handler)
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        sock.settimeout(IDLE_TIMEOUT_SECONDS)
+        # do_handshake_on_connect=False keeps the handshake out of this loop.
+        return self.tls_context.wrap_socket(
+            sock, server_side=True, do_handshake_on_connect=False), addr
+
+    def finish_request(self, request, client_address):
+        try:
+            request.do_handshake()
+        except (ssl.SSLError, OSError):
+            return              # not a client we can talk to; drop it quietly
+        super().finish_request(request, client_address)
+
+    def handle_error(self, request, client_address):
+        """A browser hanging up mid-response is normal and not worth a traceback."""
+        error = sys.exc_info()[1]
+        if isinstance(error, (ssl.SSLError, ConnectionError, socket.timeout, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
+
+
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
     """
     Serve everything with caching turned off.
@@ -121,7 +171,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-def bind(handler):
+def bind(handler, context):
     """
     Take the first free port at or above PORT.
 
@@ -130,7 +180,7 @@ def bind(handler):
     """
     for port in range(PORT, PORT + PORT_ATTEMPTS):
         try:
-            return http.server.HTTPServer(("0.0.0.0", port), handler), port
+            return TLSServer(("0.0.0.0", port), handler, context), port
         except OSError as err:
             if err.errno in (errno.EADDRINUSE, errno.EACCES):
                 print(f"  Port {port} is taken, trying {port + 1}...")
@@ -147,9 +197,6 @@ def bind(handler):
 def main():
     generate_cert()
 
-    handler = functools.partial(NoCacheHandler, directory=DIR)
-    server, port = bind(handler)
-
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     try:
         context.load_cert_chain(CERT_FILE, KEY_FILE)
@@ -159,7 +206,9 @@ def main():
             f"  Deleting them will make a fresh pair:\n"
             f"      rm {CERT_FILE} {KEY_FILE}\n"
         )
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+
+    handler = functools.partial(NoCacheHandler, directory=DIR)
+    server, port = bind(handler, context)
 
     local_ip = get_local_ip()
 
