@@ -14,394 +14,368 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ─────────────────────────────────────────────────────────
+       Design tokens
+
+       One rule governs the palette: colour means something. Green, amber and
+       red are reserved for what your body is doing, and the interface itself
+       is monochrome — white for actions, layered near-blacks for surface.
+       Nothing competes with the only pixels that carry information.
+       ───────────────────────────────────────────────────────── */
     :root {
-      --bg-primary: #0a0a1a;
-      --bg-card: rgba(20, 20, 45, 0.85);
-      --bg-glass: rgba(15, 15, 35, 0.75);
-      --border-glass: rgba(255, 255, 255, 0.08);
-      --green: #00e676;
-      --red: #ff5252;
-      --yellow: #ffd740;
-      --cyan: #00e5ff;
-      --purple: #b388ff;
-      --text-primary: #f0f0f5;
-      --text-secondary: rgba(240, 240, 245, 0.6);
-      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --bg:          #08090A;
+      --surface-1:   #101114;
+      --surface-2:   #17191D;
+      --surface-3:   #212429;
+      --line:        rgba(255,255,255,0.07);
+      --line-strong: rgba(255,255,255,0.14);
+
+      --text-1: #F4F5F7;
+      --text-2: #9A9CA5;
+      --text-3: #63656E;
+
+      --accent:    #FFFFFF;      /* primary action, Uber-style monochrome */
+      --on-accent: #08090A;
+
+      /* Semantic — the only saturated colour in the app */
+      --ok:      #3DD68C;
+      --near:    #F5B544;
+      --off:     #FF5D5D;
+      --unknown: #71747E;
+      --target:  #8894AB;
+
+      --r-sm: 10px;
+      --r-md: 14px;
+      --r-lg: 20px;
+      --r-full: 999px;
+
+      --shadow-1: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-2: 0 8px 24px -6px rgba(0,0,0,0.55);
+      --shadow-3: 0 20px 50px -12px rgba(0,0,0,0.7);
+
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+      --safe-t: max(12px, env(safe-area-inset-top));
+      --safe-b: max(12px, env(safe-area-inset-bottom));
     }
 
     html, body {
       width: 100%; height: 100%;
       overflow: hidden;
-      background: var(--bg-primary);
+      background: var(--bg);
       font-family: var(--font);
-      color: var(--text-primary);
+      color: var(--text-1);
+      font-size: 15px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       -webkit-tap-highlight-color: transparent;
+      font-feature-settings: "cv05" 1, "ss01" 1;
     }
+
+    /* ── Typography scale ── */
+    .t-display {
+      font-size: 56px; line-height: 1; font-weight: 680;
+      letter-spacing: -0.035em; font-variant-numeric: tabular-nums;
+    }
+    .t-title   { font-size: 27px; line-height: 1.15; font-weight: 660; letter-spacing: -0.025em; }
+    .t-heading { font-size: 17px; line-height: 1.3;  font-weight: 620; letter-spacing: -0.015em; }
+    .t-body    { font-size: 15px; line-height: 1.5;  font-weight: 400; }
+    .t-small   { font-size: 13px; line-height: 1.45; font-weight: 400; }
+    .t-label {
+      font-size: 11px; line-height: 1.2; font-weight: 600;
+      letter-spacing: 0.09em; text-transform: uppercase;
+    }
+
+    /* ── Icons ──
+       Line icons on a 24px grid. Emoji were doing this job, and emoji render
+       differently on every platform, cannot take a colour, and never line up
+       with type. */
+    .icon {
+      width: 22px; height: 22px; flex-shrink: 0;
+      fill: none; stroke: currentColor;
+      stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+      display: block;
+    }
+    .icon-sm { width: 18px; height: 18px; stroke-width: 1.75; }
 
     /* ── Screens ── */
     .screen { position: fixed; inset: 0; display: none; flex-direction: column; }
     .screen.active { display: flex; }
 
-    /* ── Loading Screen ── */
-    #screen-loading {
-      align-items: center; justify-content: center;
-      background: var(--bg-primary);
+    .scroll-screen {
+      overflow-y: auto; overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
     }
+
+    /* ─────────────────────────────────────────────────────────
+       Loading
+       ───────────────────────────────────────────────────────── */
+    #screen-loading { align-items: center; justify-content: center; gap: 20px; }
     .loader-ring {
-      width: 64px; height: 64px;
-      border: 3px solid rgba(255,255,255,0.1);
-      border-top-color: var(--cyan);
+      width: 34px; height: 34px;
+      border: 2px solid rgba(255,255,255,0.10);
+      border-top-color: var(--text-1);
       border-radius: 50%;
-      animation: spin 1s linear infinite;
+      animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loader-text {
-      margin-top: 20px; font-size: 14px; font-weight: 400;
-      color: var(--text-secondary); text-align: center; line-height: 1.6;
+      font-size: 13px; color: var(--text-3); text-align: center; line-height: 1.6;
     }
-    .loader-text .status { color: var(--cyan); font-weight: 500; }
+    .loader-text .status { color: var(--text-2); }
 
-    /* ── First-run safety notice ── */
-    #safety {
-      position: fixed; inset: 0; z-index: 60;
-      display: none; align-items: center; justify-content: center;
-      padding: 24px;
-      background: rgba(6, 6, 16, 0.88);
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    }
-    #safety.visible { display: flex; }
-    .safety-card {
-      max-width: 420px; width: 100%;
-      background: var(--bg-card);
-      border: 1px solid var(--border-glass);
-      border-radius: 18px;
-      padding: 26px 24px 22px;
-    }
-    .safety-card h2 { font-size: 19px; font-weight: 700; margin-bottom: 14px; }
-    .safety-card p {
-      font-size: 14.5px; line-height: 1.6;
-      color: var(--text-secondary); margin-bottom: 12px;
-    }
-    .safety-card p strong { color: var(--text-primary); font-weight: 600; }
-    .btn-safety {
-      display: block; width: 100%; margin-top: 18px;
-      padding: 15px; border: none; border-radius: 12px;
-      background: linear-gradient(135deg, var(--cyan), #0091ea);
-      color: #fff; font-family: var(--font);
-      font-size: 16px; font-weight: 700; cursor: pointer;
-    }
-    .btn-safety:active { transform: scale(0.98); opacity: 0.9; }
-
-    .select-footnote {
-      font-size: 12px; line-height: 1.55;
-      color: rgba(240, 240, 245, 0.38);
-      text-align: center; padding: 4px 8px 28px;
-    }
-
-    /* Shown instead of the app when a pose definition is malformed. Loud on
-       purpose: the alternative is scoring somebody against a broken shape. */
-    .fatal {
-      max-width: 640px; padding: 24px; text-align: left;
-      color: var(--text-primary);
-    }
-    .fatal h2 { font-size: 20px; margin-bottom: 12px; color: var(--red); }
+    .fatal { max-width: 620px; padding: 24px; text-align: left; }
+    .fatal h2 { font-size: 19px; font-weight: 640; margin-bottom: 12px; color: var(--off); }
     .fatal pre {
-      white-space: pre-wrap; font-size: 13px; line-height: 1.6;
-      color: var(--text-secondary);
+      white-space: pre-wrap; font-size: 12.5px; line-height: 1.65;
+      color: var(--text-2);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
-    /* ── Pose Selection Screen ── */
-    #screen-select {
-      background: var(--bg-primary);
-      overflow-y: auto;
-      padding: 0 20px;
-      padding-top: max(20px, env(safe-area-inset-top));
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
+    /* ─────────────────────────────────────────────────────────
+       Pose library
+       ───────────────────────────────────────────────────────── */
+    #screen-select { background: var(--bg); }
+    .select-inner {
+      width: 100%; max-width: 720px; margin: 0 auto;
+      padding: 0 20px calc(var(--safe-b) + 24px);
     }
-    .select-header {
-      text-align: center;
-      padding: 30px 0 10px;
-    }
-    .select-header h1 {
-      font-size: 28px; font-weight: 800;
-      background: linear-gradient(135deg, var(--cyan), var(--purple));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .select-header p {
-      font-size: 14px; color: var(--text-secondary);
-      margin-top: 8px;
-    }
+    .select-header { padding: calc(var(--safe-t) + 28px) 0 22px; }
+    .select-header h1 { font-size: 30px; font-weight: 680; letter-spacing: -0.03em; }
+    .select-header p { color: var(--text-3); font-size: 14px; margin-top: 5px; }
 
-    .pose-grid {
-      display: flex; flex-direction: column; gap: 14px;
-      padding: 20px 0;
-    }
+    .pose-grid { display: flex; flex-direction: column; gap: 8px; }
 
     .pose-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-glass);
-      border-radius: 16px;
-      padding: 20px;
-      cursor: pointer;
-      transition: transform 0.2s, border-color 0.2s;
+      position: relative;
       display: flex; align-items: center; gap: 16px;
+      padding: 14px 16px;
+      background: var(--surface-1);
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      cursor: pointer;
+      transition: background 0.18s var(--ease), border-color 0.18s var(--ease),
+                  transform 0.18s var(--ease);
     }
-    .pose-card:active { transform: scale(0.97); border-color: var(--cyan); }
+    .pose-card:active { transform: scale(0.985); background: var(--surface-2); }
+    @media (hover: hover) {
+      .pose-card:hover { background: var(--surface-2); border-color: var(--line-strong); }
+    }
 
-    .pose-card-emoji {
-      font-size: 40px;
-      width: 60px; height: 60px;
-      display: flex; align-items: center; justify-content: center;
-      background: rgba(255,255,255,0.05);
-      border-radius: 14px;
-      flex-shrink: 0;
+    /* The thumbnail is the pose itself, drawn from the same rig that scores
+       you. A picture of the thing, rather than an emoji standing in for it. */
+    .pose-thumb {
+      width: 64px; height: 64px; flex-shrink: 0;
+      border-radius: var(--r-sm);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
     }
-    .pose-card-info { flex: 1; }
+    .pose-card-info { flex: 1; min-width: 0; }
     .pose-card-info h3 {
-      font-size: 16px; font-weight: 700;
-      margin-bottom: 4px;
+      font-size: 15.5px; font-weight: 600; letter-spacing: -0.015em;
+      display: flex; align-items: baseline; gap: 8px;
     }
     .pose-card-info .sanskrit {
-      font-size: 12px; color: var(--purple);
-      font-weight: 500; margin-bottom: 6px;
+      font-size: 12.5px; color: var(--text-3); font-weight: 400;
+      letter-spacing: 0; margin-top: 1px;
     }
     .pose-card-info p {
-      font-size: 13px; color: var(--text-secondary);
-      line-height: 1.4;
+      font-size: 13px; color: var(--text-2); margin-top: 5px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
     }
-    .pose-card-arrow {
-      font-size: 20px; color: var(--text-secondary);
-      flex-shrink: 0;
+    .side-tag {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-3);
+      border: 1px solid var(--line-strong); border-radius: var(--r-full);
+      padding: 2px 7px; flex-shrink: 0;
     }
 
-    /* Queue toggle. Sits inside the card but swallows the tap, so the card
-       body still opens the walkthrough. */
     .pose-card-add {
-      width: 40px; height: 40px; flex-shrink: 0;
-      border-radius: 50%;
-      border: 1px solid var(--border-glass);
-      background: rgba(255,255,255,0.05);
-      color: var(--text-secondary);
-      font-family: var(--font); font-size: 20px; font-weight: 600;
+      width: 34px; height: 34px; flex-shrink: 0;
+      border-radius: var(--r-full);
+      border: 1px solid var(--line-strong);
+      background: transparent;
+      color: var(--text-2);
       display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: background 0.2s, color 0.2s, border-color 0.2s;
+      cursor: pointer; font-family: var(--font);
+      font-size: 13px; font-weight: 640;
+      font-variant-numeric: tabular-nums;
+      transition: background 0.18s var(--ease), color 0.18s var(--ease),
+                  border-color 0.18s var(--ease);
     }
     .pose-card-add.queued {
-      background: var(--cyan); border-color: var(--cyan); color: #05121a;
+      background: var(--accent); border-color: var(--accent); color: var(--on-accent);
     }
 
+    .select-footnote {
+      font-size: 12px; line-height: 1.6; color: var(--text-3);
+      padding: 24px 4px 8px; max-width: 34em;
+    }
+
+    /* ── Session bar ── */
     #session-bar {
       position: fixed; left: 0; right: 0; bottom: 0;
       display: none; align-items: center; gap: 14px;
-      padding: 14px 20px;
-      padding-bottom: max(14px, env(safe-area-inset-bottom));
-      background: var(--bg-glass);
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-      border-top: 1px solid var(--border-glass);
+      padding: 14px 20px calc(var(--safe-b) + 4px);
+      background: linear-gradient(to top, var(--bg) 62%, rgba(8,9,10,0));
       z-index: 40;
     }
     #session-bar.visible { display: flex; }
-    /* The bar is fixed, so the grid has to make room or it sits on the last
-       card — which is the card you are most likely to be reaching for. */
-    #screen-select.queueing .pose-grid { padding-bottom: 110px; }
-    #session-count { flex: 1; font-size: 14px; color: var(--text-secondary); }
-    #session-count b { color: var(--text-primary); font-weight: 600; }
-    #btn-session-start {
-      border: none; border-radius: 12px;
-      padding: 13px 20px;
-      background: linear-gradient(135deg, var(--cyan), #0091ea);
-      color: #fff; font-family: var(--font);
-      font-size: 15px; font-weight: 700; cursor: pointer;
+    #session-bar > .session-inner {
+      width: 100%; max-width: 720px; margin: 0 auto;
+      display: flex; align-items: center; gap: 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-md);
+      padding: 10px 10px 10px 16px;
+      box-shadow: var(--shadow-2);
     }
-    #btn-session-start:active { transform: scale(0.97); opacity: 0.9; }
+    #session-count { flex: 1; font-size: 13px; color: var(--text-2); }
+    #session-count b { color: var(--text-1); font-weight: 600; }
+    #screen-select.queueing .pose-grid { padding-bottom: 96px; }
 
-    .icon-btn.muted { opacity: 0.4; }
-
-    /* How much of the hold is banked. Deliberately not a number: at arm's
-       length a bar reads and a countdown does not, and the countdown is spoken
-       anyway. */
-    #hold-bar {
-      margin: 8px -14px -6px; height: 4px; border-radius: 2px;
-      background: rgba(255,255,255,0.12);
-      overflow: hidden; opacity: 0;
-      transition: opacity 0.25s ease;
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: none; border-radius: var(--r-sm);
+      font-family: var(--font); font-size: 15px; font-weight: 600;
+      letter-spacing: -0.01em;
+      padding: 13px 18px; cursor: pointer;
+      transition: transform 0.15s var(--ease), opacity 0.15s var(--ease),
+                  background 0.15s var(--ease);
     }
-    #hold-bar.visible { opacity: 1; }
-    #hold-fill {
-      height: 100%; width: 0%;
-      background: var(--green);
-      transition: width 0.15s linear;
+    .btn:active { transform: scale(0.975); }
+    .btn-primary { background: var(--accent); color: var(--on-accent); }
+    .btn-primary:active { opacity: 0.88; }
+    .btn-quiet {
+      background: var(--surface-2); color: var(--text-1);
+      border: 1px solid var(--line-strong);
     }
-
-    /* ── Guide Screen ── */
-    #screen-guide {
-      background: var(--bg-primary);
-      overflow-y: auto;
-      padding: 0 24px;
-      padding-top: max(20px, env(safe-area-inset-top));
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
-    }
-
-    .guide-back {
+    .btn-block { display: flex; width: 100%; padding: 16px; font-size: 16px; }
+    .btn-text {
+      background: none; border: none; cursor: pointer;
       display: inline-flex; align-items: center; gap: 6px;
-      font-size: 14px; font-weight: 500;
-      color: var(--cyan);
-      background: none; border: none;
-      cursor: pointer; padding: 10px 0;
+      color: var(--text-2); font-family: var(--font);
+      font-size: 14px; font-weight: 500; padding: 10px 0;
+      transition: color 0.15s var(--ease);
     }
+    .btn-text:active { color: var(--text-1); }
 
-    .guide-hero {
-      text-align: center;
-      padding: 20px 0;
+    /* ─────────────────────────────────────────────────────────
+       Pose guide
+       ───────────────────────────────────────────────────────── */
+    #screen-guide { background: var(--bg); }
+    .guide-inner {
+      width: 100%; max-width: 640px; margin: 0 auto;
+      padding: var(--safe-t) 20px calc(var(--safe-b) + 32px);
     }
-    .guide-hero .emoji { font-size: 72px; margin-bottom: 16px; display: block; }
-    .guide-hero h2 { font-size: 26px; font-weight: 800; }
-    .guide-hero .sanskrit {
-      font-size: 14px; color: var(--purple);
-      font-weight: 500; margin-top: 4px;
-    }
+    .guide-hero { padding: 6px 0 18px; }
+    .guide-hero h2 { font-size: 28px; font-weight: 680; letter-spacing: -0.03em; }
+    .guide-hero .sanskrit { font-size: 14px; color: var(--text-3); margin-top: 3px; }
 
-    /* ── Demo Figure ── */
     .demo-stage {
-      position: relative;
-      background: radial-gradient(ellipse at 50% 40%, rgba(0,229,255,0.07), rgba(255,255,255,0.02));
-      border: 1px solid var(--border-glass);
-      border-radius: 20px;
-      padding: 14px 14px 12px;
+      background: var(--surface-1);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 8px 8px 12px;
+      overflow: hidden;
     }
-    #guide-canvas {
-      display: block; width: 100%; height: 280px;
-    }
+    #guide-canvas { display: block; width: 100%; height: 290px; }
     .demo-caption {
-      min-height: 44px;
-      display: flex; align-items: center; justify-content: center;
-      text-align: center;
-      font-size: 14px; line-height: 1.45;
-      color: var(--text-primary);
-      padding: 4px 4px 10px;
+      min-height: 40px; display: flex; align-items: center; justify-content: center;
+      text-align: center; font-size: 14px; line-height: 1.45;
+      color: var(--text-2); padding: 2px 14px 10px;
     }
-    .demo-caption b { color: var(--cyan); font-weight: 600; }
+    .demo-caption b { color: var(--text-1); font-weight: 600; }
     .demo-controls {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 0 4px;
     }
-    .demo-dots { display: flex; gap: 6px; flex: 1; justify-content: center; }
+    .demo-dots { display: flex; gap: 5px; flex: 1; justify-content: center; }
     .demo-dot {
-      width: 6px; height: 6px; border-radius: 3px;
-      background: rgba(255,255,255,0.2);
-      transition: width 0.25s ease, background 0.25s ease;
+      width: 5px; height: 5px; border-radius: var(--r-full);
+      background: rgba(255,255,255,0.16);
+      transition: width 0.3s var(--ease), background 0.3s var(--ease);
     }
-    .demo-dot.active { width: 20px; background: var(--cyan); }
+    .demo-dot.active { width: 18px; background: var(--text-1); }
     .demo-btn {
-      width: 34px; height: 34px; flex-shrink: 0;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--border-glass);
-      color: var(--text-primary); font-size: 15px;
+      width: 32px; height: 32px; flex-shrink: 0;
+      border-radius: var(--r-full);
+      background: transparent; border: 1px solid var(--line);
+      color: var(--text-2);
       display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-family: var(--font);
+      cursor: pointer; transition: background 0.15s var(--ease), color 0.15s var(--ease);
     }
-    .demo-btn:active { background: rgba(255,255,255,0.16); }
+    .demo-btn:active { background: var(--surface-3); color: var(--text-1); }
 
-    .guide-section {
-      margin: 20px 0;
-    }
-    .guide-section h4 {
-      font-size: 12px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 1.5px;
-      color: var(--cyan); margin-bottom: 14px;
-    }
+    .guide-section { margin: 26px 0; }
+    .guide-section h4 { color: var(--text-3); margin-bottom: 12px; }
 
-    .guide-steps {
-      display: flex; flex-direction: column; gap: 12px;
-    }
+    .guide-steps { display: flex; flex-direction: column; }
     .guide-step {
       display: flex; gap: 14px; align-items: flex-start;
-      cursor: pointer;
-      border-radius: 10px;
-      padding: 4px 8px; margin: -4px -8px;
-      transition: background 0.25s ease;
+      cursor: pointer; border-radius: var(--r-sm);
+      padding: 9px 10px; margin: 0 -10px;
+      transition: background 0.22s var(--ease);
     }
-    .guide-step.active { background: rgba(0, 229, 255, 0.08); }
+    .guide-step.active { background: var(--surface-1); }
     .step-number {
-      width: 28px; height: 28px;
-      border-radius: 50%;
-      background: rgba(0, 229, 255, 0.12);
-      color: var(--cyan);
-      font-size: 13px; font-weight: 700;
+      width: 22px; height: 22px; border-radius: var(--r-full);
+      background: var(--surface-3); color: var(--text-3);
+      font-size: 11px; font-weight: 640;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      transition: background 0.25s ease, color 0.25s ease;
+      flex-shrink: 0; margin-top: 1px;
+      font-variant-numeric: tabular-nums;
+      transition: background 0.22s var(--ease), color 0.22s var(--ease);
     }
-    .guide-step.active .step-number { background: var(--cyan); color: #05121a; }
+    .guide-step.active .step-number { background: var(--accent); color: var(--on-accent); }
     .step-text {
-      font-size: 15px; line-height: 1.5;
-      color: var(--text-secondary);
-      padding-top: 3px;
-      transition: color 0.25s ease;
+      font-size: 14.5px; line-height: 1.5; color: var(--text-2);
+      transition: color 0.22s var(--ease);
     }
-    .guide-step.active .step-text { color: var(--text-primary); }
+    .guide-step.active .step-text { color: var(--text-1); }
 
-    .guide-tips {
-      display: flex; flex-direction: column; gap: 8px;
-    }
+    .guide-tips { display: flex; flex-direction: column; gap: 11px; }
     .guide-tip {
-      display: flex; align-items: center; gap: 10px;
-      font-size: 14px; color: var(--text-secondary);
+      display: flex; align-items: flex-start; gap: 11px;
+      font-size: 13.5px; line-height: 1.45; color: var(--text-2);
     }
-    .tip-icon { font-size: 16px; flex-shrink: 0; }
+    .guide-tip .icon { margin-top: 1px; color: var(--text-3); }
+    .guide-tip.tip-warn .icon { color: var(--near); }
+    .guide-tip.tip-good .icon { color: var(--ok); }
 
     /* ── Model picker ── */
     .model-row {
       display: flex; align-items: center; justify-content: space-between;
-      gap: 12px; margin: 22px 0 0;
+      gap: 12px; margin-top: 28px;
     }
-    .model-row .model-label {
-      font-size: 12px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 1.5px;
-      color: var(--cyan);
-    }
+    .model-row .model-label { color: var(--text-3); }
     .model-seg {
-      display: flex; padding: 3px; border-radius: 11px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border-glass);
+      display: flex; padding: 2px; border-radius: var(--r-sm);
+      background: var(--surface-2); border: 1px solid var(--line);
     }
     .model-seg button {
       border: none; background: none; cursor: pointer;
-      font-family: var(--font); font-size: 13px; font-weight: 600;
-      color: var(--text-secondary);
-      padding: 7px 16px; border-radius: 8px;
-      transition: background 0.2s, color 0.2s;
+      font-family: var(--font); font-size: 13px; font-weight: 560;
+      color: var(--text-3); padding: 6px 14px; border-radius: 8px;
+      transition: background 0.2s var(--ease), color 0.2s var(--ease);
     }
-    .model-seg button.active { background: var(--cyan); color: #05121a; }
+    .model-seg button.active { background: var(--surface-3); color: var(--text-1); }
     .model-note {
-      font-size: 12px; color: var(--text-secondary);
-      margin-top: 8px; line-height: 1.5;
+      font-size: 12.5px; color: var(--text-3);
+      margin-top: 10px; line-height: 1.55;
     }
-    .model-note.busy { color: var(--yellow); }
+    .model-note.busy { color: var(--text-2); }
 
-    .btn-begin {
-      display: block;
-      width: 100%;
-      padding: 18px;
-      margin: 30px 0;
-      border: none; border-radius: 14px;
-      background: linear-gradient(135deg, var(--cyan), #0091ea);
-      color: #fff;
-      font-family: var(--font);
-      font-size: 17px; font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.15s, opacity 0.15s;
-      letter-spacing: 0.5px;
-    }
-    .btn-begin:active { transform: scale(0.97); opacity: 0.9; }
+    #btn-begin { margin-top: 26px; }
 
-    /* ── Tracking Screen ── */
-    #screen-track {
-      background: #000;
-    }
+    /* ─────────────────────────────────────────────────────────
+       Tracking
+       ───────────────────────────────────────────────────────── */
+    #screen-track { background: #000; }
 
     /* The video and the overlay MUST agree on how the frame maps to the screen.
        Both are replaced elements with the same intrinsic size — the canvas
@@ -424,228 +398,318 @@
       transform: scaleX(-1);
     }
 
+    /* A held border rather than a flash: visible from across the room, quiet
+       enough to hold for ten seconds. */
     .perfect-glow {
       position: absolute; inset: 0;
-      border: 3px solid var(--green);
+      border: 2px solid var(--ok);
+      border-radius: 2px;
       opacity: 0; pointer-events: none; z-index: 5;
-      transition: opacity 0.5s ease;
+      transition: opacity 0.45s var(--ease);
     }
     .perfect-glow.visible {
       opacity: 1;
-      box-shadow: inset 0 0 40px rgba(0, 230, 118, 0.15);
+      box-shadow: inset 0 0 60px -12px rgba(61, 214, 140, 0.4);
     }
 
+    /* Scrims: the camera image is unpredictable, so chrome sits on a gradient
+       rather than on glass. Glass over a moving image shimmers. */
     #top-bar {
       position: absolute; top: 0; left: 0; right: 0;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 16px;
-      padding-top: max(12px, env(safe-area-inset-top));
-      z-index: 10;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px;
+      padding: var(--safe-t) 14px 40px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.62), rgba(0,0,0,0));
+      z-index: 10; pointer-events: none;
+    }
+    #top-bar > * { pointer-events: auto; }
+
+    .icon-btn {
+      width: 40px; height: 40px;
+      border-radius: var(--r-full);
+      background: rgba(20,21,24,0.62);
+      backdrop-filter: blur(14px) saturate(1.2);
+      -webkit-backdrop-filter: blur(14px) saturate(1.2);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: var(--text-1);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s var(--ease), opacity 0.15s var(--ease),
+                  transform 0.15s var(--ease);
+    }
+    .icon-btn:active { transform: scale(0.93); background: rgba(40,42,48,0.8); }
+    .icon-btn.off { color: var(--text-3); }
+    .top-btn-group { display: flex; gap: 8px; }
+
+    /* ── The live read ──
+       The score is the one number worth reading at arm's length, so it gets
+       display type and tabular figures, and everything around it gets out of
+       its way. */
+    #status-card {
+      position: absolute;
+      top: calc(var(--safe-t) + 52px); left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center;
+      z-index: 9; pointer-events: none;
+      opacity: 0; transform: translateY(-6px);
+      transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+    }
+    #status-card.visible { opacity: 1; transform: none; }
+
+    #pose-badge {
+      font-size: 12px; font-weight: 560; letter-spacing: 0.02em;
+      color: rgba(255,255,255,0.72);
+      text-shadow: 0 1px 8px rgba(0,0,0,0.7);
+      display: flex; align-items: center; gap: 7px;
+    }
+    /* The unit is not the number. Sizing "%" like a digit is the difference
+       between a readout and a display. */
+    #score-value .unit {
+      font-size: 0.42em; font-weight: 560; letter-spacing: 0;
+      margin-left: 2px; opacity: 0.7;
+    }
+    #score-value {
+      font-size: 58px; line-height: 1; font-weight: 680;
+      letter-spacing: -0.04em; margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 2px 20px rgba(0,0,0,0.65);
+      transition: color 0.35s var(--ease);
+    }
+    #score-label {
+      margin-top: 3px;
+      font-size: 12.5px; font-weight: 580; letter-spacing: -0.005em;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.7);
+      transition: color 0.35s var(--ease);
+    }
+    #score-detail {
+      margin-top: 3px; font-size: 11.5px; font-weight: 450;
+      color: rgba(255,255,255,0.5);
+      text-shadow: 0 1px 8px rgba(0,0,0,0.7);
     }
 
+    /* Hold progress. A bar, not a countdown: readable at a distance and
+       already spoken aloud. */
+    #hold-bar {
+      width: 168px; height: 3px; margin-top: 14px;
+      border-radius: var(--r-full);
+      background: rgba(255,255,255,0.16);
+      overflow: hidden; opacity: 0;
+      transition: opacity 0.3s var(--ease);
+    }
+    #hold-bar.visible { opacity: 1; }
+    #hold-fill {
+      height: 100%; width: 0%;
+      background: var(--ok); border-radius: var(--r-full);
+      transition: width 0.15s linear;
+    }
+
+    /* The score ring in the corner is redundant next to the number, so it is
+       now the hold indicator's quiet twin: kept for layout balance only. */
     #score-container {
-      position: relative;
-      width: 72px; height: 72px;
-      opacity: 0; transition: opacity 0.3s ease;
+      position: relative; width: 40px; height: 40px;
+      opacity: 0; transition: opacity 0.3s var(--ease);
     }
     #score-container.visible { opacity: 1; }
     #score-ring { transform: rotate(-90deg); }
-    #score-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 4; }
-    #score-arc { fill: none; stroke-width: 4.5; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease, stroke 0.4s ease; }
+    #score-bg { fill: none; stroke: rgba(255,255,255,0.14); stroke-width: 2.5; }
+    #score-arc {
+      fill: none; stroke-width: 2.5; stroke-linecap: round;
+      transition: stroke-dashoffset 0.4s var(--ease), stroke 0.4s var(--ease);
+    }
     #score-text {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 700; transition: color 0.4s ease;
+      font-size: 10.5px; font-weight: 640; font-variant-numeric: tabular-nums;
+      transition: color 0.4s var(--ease);
     }
 
-    .icon-btn {
-      width: 44px; height: 44px;
-      border-radius: 50%;
-      background: var(--bg-glass);
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-glass);
-      color: var(--text-primary); font-size: 20px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: background 0.2s;
-    }
-    .icon-btn:active { background: rgba(255,255,255,0.15); }
-
-    .top-btn-group { display: flex; gap: 10px; }
-
-    /* Pose name + live score, grouped so neither collides with the skeleton */
-    #status-card {
-      position: absolute;
-      top: 92px; left: 50%; transform: translateX(-50%);
-      padding: 9px 24px 12px; border-radius: 20px;
-      background: var(--bg-glass);
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--border-glass);
-      text-align: center; min-width: 190px;
-      z-index: 10; pointer-events: none;
-      opacity: 0; transition: opacity 0.3s ease;
-    }
-    #status-card.visible { opacity: 1; }
-
-    #pose-badge {
-      font-size: 15px; font-weight: 600;
-      white-space: nowrap;
-      color: var(--text-secondary);
-    }
-    #score-value {
-      margin-top: 2px;
-      font-size: 38px; font-weight: 800; line-height: 1.1;
-      transition: color 0.3s ease;
-    }
-    #score-label {
-      margin-top: 2px;
-      font-size: 11px; font-weight: 700;
-      letter-spacing: 1.8px; text-transform: uppercase;
-      transition: color 0.3s ease;
-    }
-    #score-detail {
-      margin-top: 3px;
-      font-size: 11px; font-weight: 500;
-      color: var(--text-secondary);
-    }
-
+    /* ── Corrections ── */
     #corrections-panel {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      padding: 16px;
-      padding-bottom: max(16px, env(safe-area-inset-bottom));
-      background: linear-gradient(to top, rgba(10,10,26,0.92) 60%, transparent);
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 44px 16px calc(var(--safe-b) + 8px);
+      background: linear-gradient(to top, rgba(0,0,0,0.86) 55%, rgba(0,0,0,0));
       z-index: 10;
       transform: translateY(100%);
-      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: transform 0.4s var(--ease);
     }
-    #corrections-panel.visible { transform: translateY(0); }
+    #corrections-panel.visible { transform: none; }
+    .corrections-inner { max-width: 520px; margin: 0 auto; }
     #corrections-panel h3 {
-      font-size: 12px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 1.2px;
-      color: var(--yellow); margin-bottom: 10px;
+      color: rgba(255,255,255,0.45); margin-bottom: 10px;
     }
     .correction-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 0; font-size: 14px; font-weight: 400;
-      color: var(--text-primary);
-      animation: slideIn 0.3s ease forwards;
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 0; font-size: 15px; font-weight: 500;
+      letter-spacing: -0.01em; color: var(--text-1);
+      animation: riseIn 0.35s var(--ease) both;
     }
-    @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+    .correction-item:nth-child(2) { animation-delay: 0.04s; }
+    .correction-item:nth-child(3) { animation-delay: 0.08s; }
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: none; }
+    }
     .correction-dot {
-      width: 6px; height: 6px; border-radius: 50%;
-      background: var(--red); flex-shrink: 0;
+      width: 5px; height: 5px; border-radius: var(--r-full);
+      background: var(--off); flex-shrink: 0;
+      box-shadow: 0 0 10px rgba(255,93,93,0.6);
     }
 
     #no-pose-msg {
-      position: absolute;
-      bottom: 80px; left: 50%; transform: translateX(-50%);
-      padding: 10px 24px; border-radius: 12px;
-      background: var(--bg-glass);
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-glass);
-      font-size: 15px; font-weight: 400;
-      color: var(--text-secondary); z-index: 10;
-      opacity: 0; transition: opacity 0.3s ease;
-      text-align: center;
+      position: absolute; bottom: 84px; left: 50%; transform: translateX(-50%);
+      padding: 9px 18px; border-radius: var(--r-full);
+      background: rgba(20,21,24,0.7);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.10);
+      font-size: 13.5px; color: var(--text-2); z-index: 10;
+      opacity: 0; transition: opacity 0.3s var(--ease);
+      white-space: nowrap;
     }
     #no-pose-msg.visible { opacity: 1; }
 
-    /* ── Get-Ready Overlay ── */
+    /* ── Get-ready overlay ── */
     #track-overlay {
       position: absolute; inset: 0; z-index: 20;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 10px; padding: 24px; text-align: center;
-      pointer-events: none;   /* keep the top-bar controls tappable */
-      background: rgba(10, 10, 26, 0.5);
-      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
-      transition: opacity 0.4s ease;
+      gap: 10px; padding: 32px; text-align: center;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 50% 50%,
+                  rgba(8,9,10,0.55), rgba(8,9,10,0.82));
+      backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+      transition: opacity 0.45s var(--ease);
     }
     #track-overlay.hidden { display: none; }
     #track-overlay.fading { opacity: 0; }
     #overlay-title {
-      font-size: 20px; font-weight: 700;
-      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      font-size: 21px; font-weight: 640; letter-spacing: -0.02em;
     }
     #overlay-sub {
-      font-size: 14px; color: var(--text-secondary);
-      max-width: 280px; line-height: 1.5;
+      font-size: 14px; color: var(--text-2);
+      max-width: 300px; line-height: 1.55;
     }
     #countdown-num {
-      font-size: 92px; font-weight: 800; line-height: 1;
-      color: var(--cyan);
-      text-shadow: 0 0 30px rgba(0, 229, 255, 0.5);
+      font-size: 104px; font-weight: 700; line-height: 1;
+      letter-spacing: -0.05em; font-variant-numeric: tabular-nums;
+      margin-bottom: 4px;
     }
-    #countdown-num.pulse { animation: pop 0.5s ease; }
+    #countdown-num.pulse { animation: countPop 0.55s var(--ease); }
+    @keyframes countPop {
+      0%   { transform: scale(0.72); opacity: 0; }
+      45%  { transform: scale(1.04); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
 
-    /* Real progress, because several megabytes behind a spinner cannot tell a
-       slow connection from a dead one. */
     #load-progress {
-      width: min(260px, 70vw); height: 5px;
-      border-radius: 3px; margin-top: 6px;
-      background: rgba(255,255,255,0.14);
+      width: min(240px, 66vw); height: 3px;
+      border-radius: var(--r-full); margin-top: 10px;
+      background: rgba(255,255,255,0.12);
       overflow: hidden; display: none;
     }
     #load-progress.visible { display: block; }
     #load-progress-fill {
       height: 100%; width: 0%;
-      background: var(--cyan);
-      transition: width 0.2s ease;
+      background: var(--text-1); border-radius: var(--r-full);
+      transition: width 0.25s var(--ease);
     }
     #load-progress.unknown #load-progress-fill {
-      width: 40%;
-      animation: sweep 1.4s ease-in-out infinite;
+      width: 35%; animation: sweep 1.5s var(--ease) infinite;
     }
     @keyframes sweep {
-      0% { transform: translateX(-100%); } 100% { transform: translateX(250%); }
+      0% { transform: translateX(-110%); } 100% { transform: translateX(300%); }
     }
 
-    .btn-retry {
-      display: none;
-      margin-top: 14px; padding: 12px 22px;
-      border: none; border-radius: 12px;
-      background: var(--cyan); color: #05121a;
-      font-family: var(--font); font-size: 15px; font-weight: 700;
-      cursor: pointer;
-      pointer-events: auto;   /* the overlay above it does not take taps */
-    }
+    .btn-retry { display: none; margin-top: 16px; pointer-events: auto; }
     .btn-retry.visible { display: inline-flex; }
-    @keyframes pop {
-      0% { transform: scale(0.6); opacity: 0.4; }
-      50% { transform: scale(1.12); opacity: 1; }
-      100% { transform: scale(1); opacity: 1; }
-    }
 
-    /* ── Recap Sheet ── */
+    /* ── Recap sheet ── */
     #steps-sheet {
       position: absolute; inset: 0; z-index: 30;
-      background: rgba(10, 10, 26, 0.92);
-      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-      overflow-y: auto;
-      padding: 0 24px;
-      padding-top: max(20px, env(safe-area-inset-top));
-      padding-bottom: max(24px, env(safe-area-inset-bottom));
+      background: var(--bg);
+      overflow-y: auto; overscroll-behavior: contain;
       transform: translateY(100%);
-      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: transform 0.42s var(--ease);
     }
-    #steps-sheet.visible { transform: translateY(0); }
-    #steps-sheet h3 {
-      font-size: 18px; font-weight: 700;
-      padding: 8px 0 4px;
+    #steps-sheet.visible { transform: none; }
+    .sheet-inner {
+      max-width: 640px; margin: 0 auto;
+      padding: var(--safe-t) 20px calc(var(--safe-b) + 24px);
     }
-    #sheet-canvas { display: block; width: 100%; height: 200px; margin: 6px 0; }
-    .btn-resume {
-      display: block; width: 100%;
-      padding: 16px; margin: 20px 0 0;
-      border: none; border-radius: 14px;
-      background: linear-gradient(135deg, var(--cyan), #0091ea);
-      color: #fff; font-family: var(--font);
-      font-size: 16px; font-weight: 700; cursor: pointer;
+    .sheet-grabber {
+      width: 36px; height: 4px; border-radius: var(--r-full);
+      background: var(--surface-3); margin: 8px auto 18px;
     }
-    .btn-resume:active { transform: scale(0.97); opacity: 0.9; }
+    #steps-sheet h3 { font-size: 21px; font-weight: 660; letter-spacing: -0.025em; }
+    #sheet-canvas {
+      display: block; width: 100%; height: 190px; margin: 14px 0 4px;
+    }
+    #btn-resume { margin-top: 24px; }
+
+    /* ─────────────────────────────────────────────────────────
+       First-run safety notice
+       ───────────────────────────────────────────────────────── */
+    #safety {
+      position: fixed; inset: 0; z-index: 60;
+      display: none; align-items: flex-end; justify-content: center;
+      padding: 16px;
+      background: rgba(4,5,6,0.7);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    #safety.visible { display: flex; animation: fadeIn 0.3s var(--ease); }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .safety-card {
+      max-width: 440px; width: 100%;
+      background: var(--surface-1);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-lg);
+      padding: 26px 22px calc(18px + var(--safe-b));
+      box-shadow: var(--shadow-3);
+      animation: sheetUp 0.42s var(--ease);
+    }
+    @keyframes sheetUp {
+      from { transform: translateY(18px); opacity: 0; }
+      to   { transform: none; opacity: 1; }
+    }
+    .safety-card h2 {
+      font-size: 20px; font-weight: 660; letter-spacing: -0.02em; margin-bottom: 12px;
+    }
+    .safety-card p {
+      font-size: 14.5px; line-height: 1.6; color: var(--text-2); margin-bottom: 11px;
+    }
+    .safety-card p strong { color: var(--text-1); font-weight: 600; }
+    #btn-safety-ok { margin-top: 16px; }
+
+    @media (min-width: 640px) {
+      #safety { align-items: center; }
+      .safety-card { padding-bottom: 22px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
+
+<!-- Line icons on a 24px grid. Inline so they work offline, take currentColor,
+     and line up with type — three things emoji cannot do. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m7 7-7-7 7-7"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9.2a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.3-2.8 4"/><path d="M12 17.2h.01"/></symbol>
+  <symbol id="i-sound-on" viewBox="0 0 24 24"><path d="M4 9.5h3.2L12 5.8v12.4L7.2 14.5H4z"/><path d="M16.2 9.2a4 4 0 0 1 0 5.6M18.9 6.5a7.8 7.8 0 0 1 0 11"/></symbol>
+  <symbol id="i-sound-off" viewBox="0 0 24 24"><path d="M4 9.5h3.2L12 5.8v12.4L7.2 14.5H4z"/><path d="M16.5 9.8l5 4.4M21.5 9.8l-5 4.4"/></symbol>
+  <symbol id="i-body" viewBox="0 0 24 24"><circle cx="12" cy="4.6" r="2.3"/><path d="M12 7.4v7.2M7.6 10.4h8.8M12 14.6l-3 4.8M12 14.6l3 4.8"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 24 24"><path d="M3.6 12a8.4 8.4 0 0 1 14.1-6.2l2.3 2.1"/><path d="M20.4 3.9v4.2h-4.2"/><path d="M20.4 12a8.4 8.4 0 0 1-14.1 6.2L4 16.1"/><path d="M3.6 20.1v-4.2h4.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6.5 9.2 17.3 4 12.1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.2 21 19.6H3z"/><path d="M12 10v3.6M12 16.6h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8h.01"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 8.5h13a3 3 0 0 1 3 3v.5"/><path d="M7.2 5.3 4 8.5l3.2 3.2"/><path d="M20 15.5H7a3 3 0 0 1-3-3V12"/><path d="M16.8 18.7 20 15.5l-3.2-3.2"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/></symbol>
+</svg>
 
 <!-- ═══════════ LOADING SCREEN ═══════════ -->
 <div class="screen active" id="screen-loading">
@@ -657,15 +721,18 @@
 </div>
 
 <!-- ═══════════ POSE SELECTION SCREEN ═══════════ -->
-<div class="screen" id="screen-select">
-  <div class="select-header">
-    <h1>Yoga Pose Tracker</h1>
-    <p>Choose a pose to practice</p>
+<div class="screen scroll-screen" id="screen-select">
+  <div class="select-inner">
+    <header class="select-header">
+      <h1>Poses</h1>
+      <p>Learn the shape, then hold it with the camera watching.</p>
+    </header>
+    <div class="pose-grid" id="pose-grid"></div>
+    <p class="select-footnote">
+      This reads the shape you make, and nothing else. It is not a substitute
+      for a teacher — work inside what feels easy and stop if it hurts.
+    </p>
   </div>
-  <div class="pose-grid" id="pose-grid"></div>
-  <p class="select-footnote">
-    Feedback on shape only — not a substitute for a teacher. Stop if it hurts.
-  </p>
 </div>
 <div id="safety">
   <div class="safety-card">
@@ -676,20 +743,26 @@
     <p><strong>It is not a teacher.</strong> Work inside what feels easy, come
        out of anything that hurts, and get a real teacher's eyes on you if you
        can.</p>
-    <button class="btn-safety" id="btn-safety-ok">Got it</button>
+    <button class="btn btn-primary btn-block" id="btn-safety-ok">Got it</button>
   </div>
 </div>
 
 <div id="session-bar">
-  <span id="session-count"></span>
-  <button id="btn-session-start">Start session →</button>
+  <div class="session-inner">
+    <span id="session-count"></span>
+    <button class="btn btn-primary" id="btn-session-start">
+      Start<svg class="icon icon-sm"><use href="#i-right"/></svg>
+    </button>
+  </div>
 </div>
 
 <!-- ═══════════ POSE GUIDE SCREEN ═══════════ -->
-<div class="screen" id="screen-guide">
-  <button class="guide-back" id="btn-back-select">← Back to poses</button>
+<div class="screen scroll-screen" id="screen-guide">
+  <div class="guide-inner">
+  <button class="btn-text" id="btn-back-select">
+    <svg class="icon icon-sm"><use href="#i-back"/></svg>Poses
+  </button>
   <div class="guide-hero">
-    <span class="emoji" id="guide-emoji"></span>
     <h2 id="guide-name"></h2>
     <div class="sanskrit" id="guide-sanskrit"></div>
   </div>
@@ -697,32 +770,37 @@
     <canvas id="guide-canvas"></canvas>
     <div class="demo-caption" id="demo-caption"></div>
     <div class="demo-controls">
-      <button class="demo-btn" id="demo-prev" aria-label="Previous step">‹</button>
+      <button class="demo-btn" id="demo-prev" aria-label="Previous step">
+        <svg class="icon icon-sm"><use href="#i-left"/></svg>
+      </button>
       <div class="demo-dots" id="demo-dots"></div>
-      <button class="demo-btn" id="demo-next" aria-label="Next step">›</button>
+      <button class="demo-btn" id="demo-next" aria-label="Next step">
+        <svg class="icon icon-sm"><use href="#i-right"/></svg>
+      </button>
     </div>
   </div>
 
   <div class="guide-section">
-    <h4>How to do it</h4>
+    <h4 class="t-label">How to do it</h4>
     <div class="guide-steps" id="guide-steps"></div>
   </div>
   <div class="guide-section">
-    <h4>Key form tips</h4>
+    <h4 class="t-label">Key form tips</h4>
     <div class="guide-tips" id="guide-tips"></div>
   </div>
 
   <div class="model-row">
-    <span class="model-label">Tracking model</span>
+    <span class="model-label t-label">Tracking model</span>
     <div class="model-seg" data-model-seg>
       <button data-model="full">Full</button>
       <button data-model="heavy">Heavy</button>
     </div>
   </div>
   <div class="model-note" data-model-note></div>
-  <button class="btn-retry" data-model-retry>Try again</button>
+  <button class="btn btn-quiet btn-retry" data-model-retry>Try again</button>
 
-  <button class="btn-begin" id="btn-begin">Begin Tracking →</button>
+  <button class="btn btn-primary btn-block" id="btn-begin">Start tracking</button>
+  </div>
 </div>
 
 <!-- ═══════════ TRACKING SCREEN ═══════════ -->
@@ -732,19 +810,22 @@
   <div class="perfect-glow" id="perfect-glow"></div>
 
   <div id="top-bar">
-    <div id="score-container">
-      <svg id="score-ring" width="72" height="72" viewBox="0 0 72 72">
-        <circle id="score-bg" cx="36" cy="36" r="30" />
-        <circle id="score-arc" cx="36" cy="36" r="30" />
-      </svg>
-      <div id="score-text">—</div>
-    </div>
+    <button class="icon-btn" id="btn-back-guide" title="Change pose" aria-label="Change pose">
+      <svg class="icon"><use href="#i-back"/></svg>
+    </button>
     <div class="top-btn-group">
-      <button class="icon-btn" id="btn-back-guide" title="Change Pose">🔙</button>
-      <button class="icon-btn" id="btn-how-to" title="How to do this pose">❔</button>
-      <button class="icon-btn" id="btn-sound" title="Spoken coaching">🔊</button>
-      <button class="icon-btn" id="btn-ghost" title="Toggle target outline">👤</button>
-      <button class="icon-btn" id="btn-flip" title="Flip Camera">🔄</button>
+      <button class="icon-btn" id="btn-how-to" title="How to do this pose" aria-label="How to do this pose">
+        <svg class="icon"><use href="#i-help"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-sound" title="Spoken coaching" aria-label="Spoken coaching">
+        <svg class="icon"><use href="#i-sound-on" id="sound-icon"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-ghost" title="Target outline" aria-label="Target outline">
+        <svg class="icon"><use href="#i-body"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-flip" title="Flip camera" aria-label="Flip camera">
+        <svg class="icon"><use href="#i-flip"/></svg>
+      </button>
     </div>
   </div>
 
@@ -756,11 +837,13 @@
     <div id="hold-bar"><div id="hold-fill"></div></div>
   </div>
 
-  <div id="no-pose-msg">Get into position! 🧘</div>
+  <div id="no-pose-msg">Waiting for you</div>
 
   <div id="corrections-panel">
-    <h3>⚡ Form Corrections</h3>
-    <div id="corrections-list"></div>
+    <div class="corrections-inner">
+      <h3 class="t-label">Adjust</h3>
+      <div id="corrections-list"></div>
+    </div>
   </div>
 
   <div id="track-overlay">
@@ -768,29 +851,32 @@
     <div id="overlay-title">Get into frame</div>
     <div id="overlay-sub">Step back until your whole body — head to ankles — is visible.</div>
     <div id="load-progress"><div id="load-progress-fill"></div></div>
-    <button class="btn-retry" data-model-retry>Try again</button>
-    <button class="btn-retry" id="btn-camera-retry">Try again</button>
+    <button class="btn btn-quiet btn-retry" data-model-retry>Try again</button>
+    <button class="btn btn-quiet btn-retry" id="btn-camera-retry">Try again</button>
   </div>
 
   <div id="steps-sheet">
+    <div class="sheet-inner">
+    <div class="sheet-grabber"></div>
     <h3 id="sheet-title"></h3>
     <canvas id="sheet-canvas"></canvas>
     <div class="guide-section">
-      <h4>How to do it</h4>
+      <h4 class="t-label">How to do it</h4>
       <div class="guide-steps" id="sheet-steps"></div>
     </div>
 
     <div class="model-row">
-      <span class="model-label">Tracking model</span>
+      <span class="model-label t-label">Tracking model</span>
       <div class="model-seg" data-model-seg>
         <button data-model="full">Full</button>
         <button data-model="heavy">Heavy</button>
       </div>
     </div>
     <div class="model-note" data-model-note></div>
-    <button class="btn-retry" data-model-retry>Try again</button>
+    <button class="btn btn-quiet btn-retry" data-model-retry>Try again</button>
 
-    <button class="btn-resume" id="btn-resume">Back to tracking →</button>
+    <button class="btn btn-primary btn-block" id="btn-resume">Back to tracking</button>
+    </div>
   </div>
 </div>
 
@@ -895,7 +981,8 @@ function fitFigure(P, w, h, pad) {
   return { map: p => ({ x: p.x * scale + ox, y: p.y * scale + oy }), scale };
 }
 
-const CYAN = "#00e5ff";
+// Kept in step with the CSS tokens by hand — the canvas cannot read them.
+const CYAN = "#F4F5F7";           // the demo figure's highlight, now neutral
 
 function drawFigure(ctx, P, tf, opts = {}) {
   const { map, scale } = tf;
@@ -957,10 +1044,10 @@ function drawFigure(ctx, P, tf, opts = {}) {
 // ─────────────────────────────────────────────────────────────
 // Drawing
 // ─────────────────────────────────────────────────────────────
-const GREEN = "#00e676";
-const RED = "#ff5252";
-const YELLOW = "#ffd740";
-const GREY = "rgba(190, 190, 205, 0.5)";   // seen too poorly to judge
+const GREEN = "#3DD68C";
+const RED = "#FF5D5D";
+const YELLOW = "#F5B544";
+const GREY = "rgba(113, 116, 126, 0.75)";   // seen too poorly to judge
 
 function drawSkeleton(ctx, landmarks, w, h, jointResults, targetPx, reliable) {
   const badJoints = new Set();
@@ -1042,9 +1129,6 @@ function showScreen(id) {
 // ─────────────────────────────────────────────────────────────
 // UI Elements
 // ─────────────────────────────────────────────────────────────
-const scoreContainer = document.getElementById("score-container");
-const scoreArc = document.getElementById("score-arc");
-const scoreText = document.getElementById("score-text");
 const poseBadge = document.getElementById("pose-badge");
 const correctionsPanel = document.getElementById("corrections-panel");
 const correctionsList = document.getElementById("corrections-list");
@@ -1057,10 +1141,6 @@ const perfectGlow = document.getElementById("perfect-glow");
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-
-const circumference = 2 * Math.PI * 30;
-scoreArc.style.strokeDasharray = circumference;
-scoreArc.style.strokeDashoffset = circumference;
 
 function getScoreColor(score) {
   if (score >= 80) return GREEN;
@@ -1083,7 +1163,6 @@ function scoreLabelFor(score, partial) {
 
 function updateTrackingUI(poseName, match, shown, detected) {
   if (!detected || !match) {
-    scoreContainer.classList.remove("visible");
     statusCard.classList.remove("visible");
     correctionsPanel.classList.remove("visible");
     noPoseMsg.classList.add("visible");
@@ -1100,18 +1179,17 @@ function updateTrackingUI(poseName, match, shown, detected) {
   // Too little of the body in view — or too little of it facing the lens — to
   // say anything meaningful.
   if (match.scored === 0) {
-    scoreContainer.classList.remove("visible");
     correctionsPanel.classList.remove("visible");
     perfectGlow.classList.remove("visible");
     statusCard.classList.add("visible");
     poseBadge.textContent = `🧘 ${sessionPrefix()}${poseName}`;
     scoreValue.textContent = "—";
-    scoreValue.style.color = "var(--text-secondary)";
+    scoreValue.style.color = "var(--text-2)";
     const sideways = (match.view || "front") === "side";
     scoreLabel.textContent = turned
       ? (sideways ? "Turn side-on" : "Turn towards the camera")
       : "Can't see enough";
-    scoreLabel.style.color = "var(--text-secondary)";
+    scoreLabel.style.color = "var(--text-2)";
     scoreDetail.textContent = turned
       ? (sideways ? "This pose can only be read from the side"
                   : "You're side-on — from here the camera can't judge your angles")
@@ -1119,13 +1197,7 @@ function updateTrackingUI(poseName, match, shown, detected) {
     return;
   }
 
-  scoreContainer.classList.add("visible");
-  const offset = circumference - (score / 100) * circumference;
-  scoreArc.style.strokeDashoffset = offset;
   const color = getScoreColor(score);
-  scoreArc.style.stroke = color;
-  scoreText.style.color = color;
-  scoreText.textContent = `${Math.round(score)}%`;
 
   const aligned = match.aligned ?? Object.values(jointResults).filter(r => r.ok).length;
   const total = Object.keys(jointResults).length;
@@ -1137,7 +1209,7 @@ function updateTrackingUI(poseName, match, shown, detected) {
   const partial = (match.coverage ?? 1) < 0.999;
   statusCard.classList.add("visible");
   poseBadge.textContent = `${score >= 80 ? "✅" : "🧘"} ${sessionPrefix()}${poseName}`;
-  scoreValue.textContent = `${Math.round(score)}%`;
+  scoreValue.innerHTML = `${Math.round(score)}<span class="unit">%</span>`;
   scoreValue.style.color = color;
   scoreLabel.textContent = partial ? scoreLabelFor(score, true) : scoreLabelFor(score);
   scoreLabel.style.color = color;
@@ -1277,14 +1349,15 @@ for (const [key, pose] of Object.entries(YOGA_POSES)) {
   const card = document.createElement("div");
   card.className = "pose-card";
   card.innerHTML = `
-    <div class="pose-card-emoji">${pose.emoji}</div>
+    <canvas class="pose-thumb" width="128" height="128"></canvas>
     <div class="pose-card-info">
-      <h3>${pose.name}</h3>
+      <h3>${pose.name}${pose.view === "side" ? '<span class="side-tag">side on</span>' : ""}</h3>
       <div class="sanskrit">${pose.sanskrit}</div>
       <p>${pose.description}</p>
     </div>
     <button class="pose-card-add" data-key="${key}" aria-label="Add to session">+</button>
   `;
+  drawThumb(card.querySelector(".pose-thumb"), primary(key));
   card.addEventListener("click", () => showGuide(key));
   card.querySelector(".pose-card-add").addEventListener("click", (e) => {
     e.stopPropagation();      // the card body still opens the walkthrough
@@ -1439,9 +1512,9 @@ function drawDemo(canvas, variant, focus, bob = 0) {
   // ground line under the lowest foot
   const feet = Math.max(tf.map(ref.left_ankle).y, tf.map(ref.right_ankle).y);
   const grad = c.createLinearGradient(0, 0, w, 0);
-  grad.addColorStop(0, "rgba(0,229,255,0)");
-  grad.addColorStop(0.5, "rgba(0,229,255,0.25)");
-  grad.addColorStop(1, "rgba(0,229,255,0)");
+  grad.addColorStop(0, "rgba(244,245,247,0)");
+  grad.addColorStop(0.5, "rgba(244,245,247,0.18)");
+  grad.addColorStop(1, "rgba(244,245,247,0)");
   c.strokeStyle = grad; c.lineWidth = 1.5;
   c.beginPath(); c.moveTo(w * 0.08, feet + 8); c.lineTo(w * 0.92, feet + 8); c.stroke();
 
@@ -1481,11 +1554,43 @@ function stopDemoLoop() {
   demoRAF = null;
 }
 
+// Pose data writes its tips with an emoji marker. The UI draws a real icon,
+// so the marker is a key into this rather than something rendered directly —
+// which also means the tone (a caution reads differently from a pointer) is
+// available to colour it.
+const TIP_ICONS = {
+  "✅": { icon: "i-check", tone: "tip-good" },
+  "⚠️": { icon: "i-alert", tone: "tip-warn" },
+  "📐": { icon: "i-info", tone: "" },
+  "🔁": { icon: "i-repeat", tone: "" },
+};
+const tipIcon = (marker) => TIP_ICONS[marker] || { icon: "i-dot", tone: "" };
+
+/**
+ * A pose thumbnail: the pose's own reference figure, at card size. Drawn from
+ * the same rig that scores you, so the picture on the card and the shape being
+ * measured cannot disagree.
+ */
+function drawThumb(canvas, variant) {
+  const ctx = canvas.getContext("2d");
+  const size = canvas.width;          // fixed, since the card may not be laid out yet
+  ctx.clearRect(0, 0, size, size);
+  const tf = fitFigure(variant.reference, size, size, size * 0.09);
+  ctx.save();
+  ctx.translate(size, 0);
+  ctx.scale(-1, 1);                   // mirrored, to match the demo and the camera
+  drawFigure(ctx, variant.reference, tf, {
+    color: "rgba(244,245,247,0.78)",
+    lw: Math.max(4, tf.scale * 0.030),
+    joints: false,
+  });
+  ctx.restore();
+}
+
 function showGuide(key) {
   selectedPoseKey = key;
   const pose = YOGA_POSES[key];
 
-  document.getElementById("guide-emoji").textContent = pose.emoji;
   document.getElementById("guide-name").textContent = pose.name;
   document.getElementById("guide-sanskrit").textContent = pose.sanskrit;
 
@@ -1500,12 +1605,13 @@ function showGuide(key) {
     { icon: "🔁", text: "Either side — the tracker follows whichever you do, "
                       + "so work through both" },
   ];
-  tipsEl.innerHTML = tips.map(tip =>
-    `<div class="guide-tip">
-      <span class="tip-icon">${tip.icon}</span>
+  tipsEl.innerHTML = tips.map(tip => {
+    const { icon, tone } = tipIcon(tip.icon);
+    return `<div class="guide-tip ${tone}">
+      <svg class="icon icon-sm"><use href="#${icon}"/></svg>
       <span>${tip.text}</span>
-    </div>`
-  ).join("");
+    </div>`;
+  }).join("");
 
   demoDots.innerHTML = pose.steps.map(() => `<div class="demo-dot"></div>`).join("");
 
@@ -1675,8 +1781,9 @@ const holdFill = document.getElementById("hold-fill");
 const btnSound = document.getElementById("btn-sound");
 
 function renderSound() {
-  btnSound.textContent = voice.enabled ? "🔊" : "🔇";
-  btnSound.classList.toggle("muted", !voice.enabled);
+  document.getElementById("sound-icon")
+    .setAttribute("href", voice.enabled ? "#i-sound-on" : "#i-sound-off");
+  btnSound.classList.toggle("off", !voice.enabled);
   btnSound.title = voice.enabled ? "Spoken coaching on" : "Spoken coaching off";
 }
 btnSound.addEventListener("click", () => {
@@ -1823,7 +1930,7 @@ function measureBody(landmarks, w, h) {
   return bodyLengths;
 }
 
-const GHOST_NEUTRAL = "rgba(0, 229, 255, 0.85)";
+const GHOST_NEUTRAL = "rgba(136, 148, 171, 0.85)";
 
 /**
  * Paints each outline segment by how that body part is doing: red where a joint
@@ -1956,14 +2063,14 @@ document.getElementById("btn-back-guide").addEventListener("click", () => {
 
 btnGhost.addEventListener("click", () => {
   ghostOn = !ghostOn;
-  btnGhost.style.opacity = ghostOn ? "1" : "0.4";
+  btnGhost.classList.toggle("off", !ghostOn);
 });
 
 // ── In-session recap: the same walkthrough, without leaving the camera ──
 document.getElementById("btn-how-to").addEventListener("click", () => {
   const variant = currentVariant || primary(selectedPoseKey);
   const pose = variant.pose;
-  document.getElementById("sheet-title").textContent = `${pose.emoji}  ${sidedName(pose)}`;
+  document.getElementById("sheet-title").textContent = sidedName(pose);
   document.getElementById("sheet-steps").innerHTML = renderSteps(pose);
   stepsSheet.classList.add("visible");
   requestAnimationFrame(() =>
