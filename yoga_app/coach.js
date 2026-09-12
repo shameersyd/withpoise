@@ -192,6 +192,18 @@ export const LOST_MESSAGES = {
  * A pose whose shape lives in the sagittal plane — Downward Dog — is the exact
  * reverse: facing the camera is what makes it unreadable.
  */
+/**
+ * Talking someone through the calibration, which they cannot watch while doing.
+ *
+ * Said once per step rather than throttled, because each is an instruction to
+ * act on immediately and there are only three of them.
+ */
+export const CALIBRATION_PROMPTS = {
+  front: "Stand facing the camera, arms at your sides, and hold still.",
+  turn: "Now turn side-on to the camera.",
+  side: "Hold it there.",
+};
+
 export const turnAdvice = (view) =>
   view === "side"
     ? "Turn side-on to the camera."
@@ -227,6 +239,7 @@ export class Coach {
     this.focusJoint = null;        // the one thing currently being asked for
     this.framingSince = null;
     this.lastPhase = null;
+    this.calibrationStep = null;
   }
 
   /** Forget only what is specific to one pose, keeping the throttle honest. */
@@ -238,6 +251,7 @@ export class Coach {
     this.focusJoint = null;
     this.framingSince = null;
     this.lastPhase = null;
+    this.calibrationStep = null;
   }
 
   say(kind, text, now, { interrupt = false, throttled = true } = {}) {
@@ -292,6 +306,14 @@ export class Coach {
         : state.view === "side"
           ? "Stand side-on to the camera for this one."
           : "Turn so I can see your shoulders and hips.", now, { interrupt: true });
+    }
+
+    // ── measuring the user ──
+    if (phase === "calibrating") {
+      if (state.calibrationStep === this.calibrationStep) return null;
+      this.calibrationStep = state.calibrationStep;
+      const line = CALIBRATION_PROMPTS[state.calibrationStep];
+      return line ? this.say("calibrating", line, now, { interrupt: true }) : null;
     }
 
     // ── the count-in ──

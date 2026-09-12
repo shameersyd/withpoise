@@ -606,6 +606,21 @@
       overflow: hidden; display: none;
     }
     #load-progress.visible { display: block; }
+
+    /* Calibration progress. Same language as the model download bar, because
+       it is the same promise: something is happening and here is how much. */
+    #calib-bar {
+      width: min(200px, 60vw); height: 3px;
+      border-radius: var(--r-full); margin-top: 12px;
+      background: rgba(255,255,255,0.12);
+      overflow: hidden; display: none;
+    }
+    #calib-bar.visible { display: block; }
+    #calib-fill {
+      height: 100%; width: 0%;
+      background: var(--text-1); border-radius: var(--r-full);
+      transition: width 0.12s linear;
+    }
     #load-progress-fill {
       height: 100%; width: 0%;
       background: var(--text-1); border-radius: var(--r-full);
@@ -851,6 +866,8 @@
     <div id="overlay-title">Get into frame</div>
     <div id="overlay-sub">Step back until your whole body — head to ankles — is visible.</div>
     <div id="load-progress"><div id="load-progress-fill"></div></div>
+    <div id="calib-bar"><div id="calib-fill"></div></div>
+    <button class="btn btn-quiet btn-retry" id="btn-skip-calib">Skip this</button>
     <button class="btn btn-quiet btn-retry" data-model-retry>Try again</button>
     <button class="btn btn-quiet btn-retry" id="btn-camera-retry">Try again</button>
   </div>
@@ -919,6 +936,10 @@ const YOGA_POSES = (() => {
 })();
 import { Coach, HoldTimer, Session, rankCorrections } from "./coach.js";
 import { scoreObservation } from "./scoring.js";
+import { Tilt } from "./gravity.js";
+import {
+  CalibrationRun, loadCalibration, saveCalibration, proportionsOf,
+} from "./calibration.js";
 import { Voice } from "./voice.js";
 import { FrameBudget } from "./pacing.js";
 
@@ -1455,6 +1476,7 @@ function endSession() {
 document.getElementById("btn-session-start").addEventListener("click", async () => {
   if (!queued.length) return;
   voice.prime();                // must happen inside the tap, or iOS stays mute
+  tilt.start();
   session = new Session(queued.slice(),
     Object.fromEntries(queued.map((k) => [k, !YOGA_POSES[k].symmetric])));
   selectedPoseKey = session.current.key;
@@ -1759,6 +1781,54 @@ function setModel(model) {
   startWorker(model);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Knowing the user and knowing which way is down
+//
+// Both are optional. Without the sensor the app assumes the camera is upright,
+// which is what it assumed before there was a sensor; without a calibration it
+// measures limb lengths per frame, which is what it did before there was one.
+// Neither absence needs a branch anywhere downstream.
+// ─────────────────────────────────────────────────────────────
+const tilt = new Tilt();
+
+let calibration = null;          // a run in progress
+let bodyProportions = null;      // limb lengths relative to the torso
+let calibrationSkipped = false;
+
+function adoptCalibration(bones) {
+  bodyProportions = proportionsOf(bones);
+  return bodyProportions !== null;
+}
+
+/** Does this session still owe us a measurement? */
+function needsCalibration() {
+  if (calibrationSkipped) return false;
+  if (tilt.movedSinceCalibration) return true;
+  return bodyProportions === null;
+}
+
+const calibBar = document.getElementById("calib-bar");
+const calibFill = document.getElementById("calib-fill");
+const btnSkipCalib = document.getElementById("btn-skip-calib");
+
+btnSkipCalib.addEventListener("click", () => {
+  calibrationSkipped = true;
+  calibration = null;
+  btnSkipCalib.classList.remove("visible");
+  calibBar.classList.remove("visible");
+});
+
+const CALIBRATION_TITLES = {
+  front: "Let me measure you",
+  turn: "Now turn side-on",
+  side: "Hold it there",
+};
+const CALIBRATION_SUBS = {
+  front: "Stand facing the camera with your arms at your sides, and hold still.",
+  turn: "Turn a quarter turn, so the camera sees you side-on.",
+  side: "Hold still for a moment while I measure the other view.",
+};
+
 // Latched per-joint verdicts for the outline. Cleared whenever a session
 // restarts so a new pose never inherits the last one's colours.
 const verdicts = new VerdictLatch();
@@ -1872,6 +1942,7 @@ function resetTrackPhase() {
   latestResult = null;
   resetBodyLengths();
   resetOutlineFlip();
+  calibration = null;
   verdicts.reset();
   sideSelector.reset();
   currentVariant = null;
@@ -1919,6 +1990,26 @@ function measureBody(landmarks, w, h) {
     head: neck * 0.55,
   };
   if (!(m.torso > 20)) return null;
+
+  // If this body has been measured, only one number here is worth keeping: the
+  // torso, which sets the scale. Every other limb is being watched at whatever
+  // angle the pose puts it, and a foreshortened limb measures short — which is
+  // exactly the error the outline then inherits. Calibrated proportions were
+  // taken from the view that could see each bone, and they do not change.
+  if (bodyProportions) {
+    const torsoPx = m.torso;
+    return {
+      torso: torsoPx,
+      shoulderHalf: torsoPx * bodyProportions.shoulderSpan / 2,
+      hipHalf: torsoPx * bodyProportions.hipSpan / 2,
+      upper: torsoPx * bodyProportions.upperArm,
+      fore: torsoPx * bodyProportions.forearm,
+      thigh: torsoPx * bodyProportions.thigh,
+      shin: torsoPx * bodyProportions.shin,
+      neck: torsoPx * bodyProportions.neck,
+      head: torsoPx * bodyProportions.neck * 0.55,
+    };
+  }
 
   if (!bodyLengths) {
     bodyLengths = m;
@@ -2039,6 +2130,7 @@ function drawGhost(ctx, variant, w, h, landmarks, jointResults, targetPx, reliab
 
 document.getElementById("btn-begin").addEventListener("click", async () => {
   voice.prime();
+  tilt.start();          // iOS gates the sensors behind a gesture, as it does audio
   session = null;
   stopDemoLoop();
   showScreen("screen-track");
@@ -2224,11 +2316,51 @@ function startTrackingLoop() {
         speakFrom({ phase: "framing", detected: !!landmarks, view: pose.view }, timestamp);
       } else {
         if (!readySince) readySince = timestamp;
+
+        // The framing phase used to spend 500ms doing nothing but waiting. It
+        // now spends it deciding whether we know this body yet, and measuring
+        // it if we do not.
         if (trackPhase === "framing" && timestamp - readySince > 500) {
-          trackPhase = "countdown";
-          countdownStart = timestamp;
+          if (needsCalibration()) {
+            trackPhase = "calibrating";
+            calibration = new CalibrationRun();
+          } else {
+            trackPhase = "countdown";
+            countdownStart = timestamp;
+          }
         }
+
+        if (trackPhase === "calibrating") {
+          const progress = calibration.update({
+            world, reliable,
+            gravity: tilt.available ? tilt.gravity : null,
+            now: timestamp,
+          });
+
+          if (progress.result && adoptCalibration(progress.result.bones)) {
+            saveCalibration(progress.result);
+            tilt.markCalibrated();
+            calibration = null;
+            trackPhase = "countdown";
+            countdownStart = timestamp;
+          } else if (calibrationSkipped) {
+            trackPhase = "countdown";
+            countdownStart = timestamp;
+          } else {
+            const step = progress.step;
+            setOverlay(`calibrating-${step}`,
+              CALIBRATION_TITLES[step] || "Measuring",
+              CALIBRATION_SUBS[step] || "");
+            calibBar.classList.add("visible");
+            btnSkipCalib.classList.add("visible");
+            calibFill.style.width = `${Math.round(progress.progress * 100)}%`;
+            speakFrom({ phase: "calibrating", calibrationStep: step }, timestamp);
+          }
+        }
+
         if (trackPhase === "countdown") {
+          calibBar.classList.remove("visible");
+          btnSkipCalib.classList.remove("visible");
           const remaining = 3 - Math.floor((timestamp - countdownStart) / 1000);
           if (remaining <= 0) {
             trackPhase = "live";
@@ -2454,6 +2586,10 @@ function init() {
 
   // The model downloads in the background: browsing poses and reading the
   // walkthrough need no landmarker, so there's nothing to wait for here.
+  // A body measured in an earlier session is still the same body.
+  const stored = loadCalibration();
+  if (stored) adoptCalibration(stored.bones);
+
   startWorker(currentModel);
   renderQueue();
   showScreen("screen-select");
