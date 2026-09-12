@@ -16,6 +16,7 @@ import {
   recogniseFaults, facingWrongWay, SEGMENT_NAMES,
 } from "./pose-core.js";
 import { rankCorrections } from "./coach.js";
+import { implausibleLandmarks } from "./depth.js";
 
 /**
  * Fold a segment match into a joint match, so one score covers both.
@@ -63,6 +64,7 @@ function addSegments(match, segments) {
  *   variants     [{ pose, reference }] — every side of the pose being held
  *   tips         correction phrasings, keyed by joint
  *   reliable     Set of trustworthy landmark names; computed if omitted
+ *   boneLengths  calibrated metric bone lengths, if the user has been measured
  *   sideSelector optional SideSelector, for stickiness between frames
  *   verdicts     optional VerdictLatch, for red/green hysteresis
  *   now          timestamp, only needed when sideSelector is given
@@ -78,7 +80,17 @@ export function scoreObservation(observation, options) {
     now = 0, width = 1, height = 1,
   } = options;
 
-  const reliable = options.reliable || reliableLandmarks(landmarks);
+  let reliable = options.reliable || reliableLandmarks(landmarks);
+
+  // A landmark whose bone projects longer than that bone can be is not where it
+  // appears to be. Needs a calibration to check against, and does nothing
+  // without one.
+  if (world && options.boneLengths) {
+    const implausible = implausibleLandmarks(world, options.boneLengths);
+    if (implausible.size) {
+      reliable = new Set([...reliable].filter(name => !implausible.has(name)));
+    }
+  }
   const angles = computeAngles(world, landmarks, width, height);
 
   // How square the user is to the lens, and which joints that leaves

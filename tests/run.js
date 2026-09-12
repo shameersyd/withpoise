@@ -9,5 +9,6 @@ import "./schema.test.js";
 import "./spatial.test.js";
 import "./gravity.test.js";
 import "./calibration.test.js";
+import "./depth.test.js";
 
 run();

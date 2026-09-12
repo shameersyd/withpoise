@@ -1793,10 +1793,12 @@ const tilt = new Tilt();
 
 let calibration = null;          // a run in progress
 let bodyProportions = null;      // limb lengths relative to the torso
+let bodyBones = null;            // and the same in metres, for plausibility checks
 let calibrationSkipped = false;
 
 function adoptCalibration(bones) {
   bodyProportions = proportionsOf(bones);
+  bodyBones = bodyProportions ? bones : null;
   return bodyProportions !== null;
 }
 
@@ -2233,6 +2235,7 @@ function evaluate(landmarks, world, reliable, w, h, timestamp) {
     reliable,
     sideSelector,
     verdicts,
+    boneLengths: bodyBones,
     now: timestamp,
     width: w,
     height: h,
