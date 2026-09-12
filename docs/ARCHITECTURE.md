@@ -3,8 +3,8 @@
 A survey of `yoga_app/` and `serve.py` as they stand today. Descriptive only:
 nothing here is a proposal, and nothing was changed to write it.
 
-> **Currency.** Written at Phase 0 of `CLAUDE_CODE_BRIEF.md` and updated at the
-> end of Phases 1 to 5. Sections 1–4 describe the code as it stands; section 5
+> **Currency.** Written at Phase 0 of `CLAUDE_CODE_BRIEF.md`, updated through
+> its five phases, and again at the end of `SPATIAL_ACCURACY_BRIEF.md`. Sections 1–4 describe the code as it stands; section 5
 > marks what has been fixed and what is still open.
 
 Files:
@@ -15,6 +15,10 @@ Files:
 | `yoga_app/pose-core.js` | The pure half — angle math, reliability, camera geometry, scoring, mirroring, smoothing, latching. No DOM, no canvas, no worker |
 | `yoga_app/poses.js` | The six pose definitions and the correction phrasings. Data only |
 | `yoga_app/pose-schema.js` | What a pose may contain, checked at load; and the targets derived from its rig |
+| `yoga_app/scoring.js` | The pipeline: landmarks in, a judged pose out. Called by the app and by the suite, so there is one of it |
+| `yoga_app/calibration.js` | Measuring the user's bone lengths from two views, once per body |
+| `yoga_app/gravity.js` | Which way is down, from the IMU, where the device will say |
+| `yoga_app/depth.js` | Depth reconstructed from bone lengths. Built, measured, and deliberately not in the live path — see LIMITS.md §5 |
 | `yoga_app/coach.js` | What to say and when, plus the hold timer and the session queue. Pure: time is passed in |
 | `yoga_app/voice.js` | `speechSynthesis` and the completion tone, and the remembered on/off switch |
 | `yoga_app/pacing.js` | How often to run detection, chosen from measured inference time |
@@ -25,7 +29,9 @@ Files:
 | `LICENSE`, `README.md` | MIT, and the deploy-first README |
 | `tools/show-pose.sh` | What shape a rig actually makes: validation, derived angles, an ASCII sketch |
 | `docs/LIMITS.md` | What the scoring cannot see, and which of that is fixable |
-| `tests/` | Harness, fixtures and suites, run by `./tests/run.sh`; plus `smoke.sh`, a browser test of the parts `jsc` cannot see |
+| `tests/` | Harness, fixtures and suites, run by `./tests/run.sh` under Node or `jsc`; plus `smoke.sh`, a browser test of the parts neither can see |
+| `tests/synthetic.js` | Building synthetic bodies and posing them into known geometric faults |
+| `tests/eval.sh` | pose × fault × severity → score. Output committed as `eval-baseline.txt`, so a change to the scoring is a diff |
 
 `pose-core.js` is imported by both `index.html` and `pose-worker.js`, which is
 what keeps the visibility threshold and the filter tuning from existing in two
@@ -64,7 +70,8 @@ getUserMedia ──▶ <video> ──▶ rAF: renderFrame()
                                      computeAngles(world, …)        ← world space
                                      bodyFrame(world) → turnDegrees
                                      jointMeasurability(world, frame)
-                                     matchSinglePose(…) × each side
+                                     segmentDirections(world, frame)
+                                     matchSinglePose + matchSegments × each side
                                      sideSelector.pick(…)
                                      verdicts.apply(match.results)
                                      buildTargetFigure(variant, …)
@@ -157,11 +164,30 @@ Per live tick:
   outline cannot strobe. Colours and corrections use the latched copy; the
   score uses the graded values underneath.
 
+Two measurements, summed into one score:
+
+| | asks | invariant to | catches |
+|---|---|---|---|
+| **joint angles** | how bent is this limb | rotation, translation, scale | a knee at the wrong angle |
+| **segment directions** | where does this limb point | nothing — they live in the body frame | a knee pointing the wrong way |
+
+Angles alone were the app's entire model until `SPATIAL_ACCURACY_BRIEF.md`, and
+an angle cannot see rotation: a knee collapsing 13cm inward, a pelvis yawed 45°
+and a body reflected front-to-back all scored 100. Directions are derived from
+the same rig as the angles, so the rig remains the only description of a pose's
+shape.
+
+A direction's error is split into the part across the image and the part along
+the camera axis, and the second counts for a quarter of the first — from the
+error profile, z being about four times noisier. Direction scoring switches off
+entirely when the user is facing the wrong way for the pose, because the body
+frame is then being read through a compressed depth axis.
+
 `matchSinglePose` sets a joint aside for one of two distinguishable reasons:
 
 | | why | what the user is told |
 |---|---|---|
-| `unscored` | its landmarks are off-frame or occluded | "step back" |
+| `unscored` | its landmarks are off-frame, occluded, or in an impossible place | "step back" |
 | `uncertain` | it points down the camera axis | "turn" |
 
 and for everything else grades it:
@@ -173,7 +199,7 @@ const ok      = diff <= tolerance;                      // raw, pre-latch
 ```
 
 ```
-score    = Σ(quality × weight) / Σ(weight)     over judged joints
+score    = Σ(quality × weight) / Σ(weight)     over judged joints and segments
 coverage = Σ(weight of judged) / Σ(weight of all)
 ```
 
@@ -226,7 +252,13 @@ whichever order the user chooses, since the side is detected rather than asked.
 
 ### Session phase machine
 
-`trackPhase` runs `loading → framing → countdown → live`, plus `lost`.
+`trackPhase` runs `loading → framing → calibrating → countdown → live`, plus
+`lost`.
+
+`calibrating` is where the user is measured — hold facing the camera, turn
+side-on, hold again — and it replaced a passive 500ms wait. It is skipped
+entirely once a calibration is stored, and skippable by the user, in which case
+everything falls back to the per-frame limb estimate it used before.
 `framing` waits for all four `TORSO` landmarks to be reliable, holds for 500 ms,
 then counts down 3 s before scoring starts. Nothing is scored and no
 corrections are shown outside `live`.
@@ -241,7 +273,7 @@ normal in a small room, keeps scoring, and gets a spoken "step back" instead.
 
 ## 2. Pose definitions
 
-All five poses live in the `YOGA_POSES` object literal at `index.html`,
+All six poses live in the `YOGA_POSES` object literal in `poses.js`,
 inside the inline script. There is no separate data file. Related lookup
 tables sit alongside: `CORRECTION_TIPS` (`index.html`), `ANGLE_JOINTS`
 (`index.html`), `BODY_PARTS` (`index.html`), `SEG_DEFAULT`
@@ -347,16 +379,31 @@ Everything **else** uses image `landmarks`: reliability/framing checks
 figure. This split is deliberate and correct — world landmarks carry no
 information about where the body is in the frame.
 
-**Important caveat for anything built on top of this.** Using
-`worldLandmarks` removes the *positional* projection error, but it does not
-make scoring view-invariant. MediaPipe's world landmarks are a monocular
-regression: the depth axis is the least-constrained output, and for a body
-turned edge-on to the camera the depth error is largest exactly where it
-matters most. Joint angles computed in that frame are still measurably
-camera-dependent, and nothing in the pipeline currently detects or reports
-that. There is also **no body-frame rotation step** anywhere: angles are read
-straight out of MediaPipe's world frame, which is gravity-ish aligned to the
-camera, not to the torso.
+**What is and is not done about this.** Using `worldLandmarks` removes the
+*positional* projection error. It does not remove depth ambiguity: MediaPipe's
+world landmarks are a monocular regression, the depth axis is the
+least-constrained output, and the error is largest on a body turned away from
+the lens.
+
+Three things in the live path address it:
+
+- **`bodyFrame`** builds an orthonormal frame from the hip and shoulder vectors
+  and reports how far off-axis the user is standing.
+- **`toBodyFrame`** expresses landmarks in it. Not used for angles, which are
+  rotation-invariant and would produce identical numbers — used for segment
+  *directions*, which are not.
+- **`jointMeasurability` and `depthShare`** report how much of each measurement
+  is being read off the camera's depth axis, and joints past the limit are
+  reported as *can't tell* rather than scored.
+
+What remains true is that none of that recovers the missing information. It
+reports the absence rather than filling it. `docs/LIMITS.md` §2 is the honest
+account of what that costs.
+
+> An earlier version of this section said there was "no body-frame rotation step
+> anywhere" and that nothing "currently detects or reports" view-dependence.
+> Both were written before Phase 1a of the first brief and both were false from
+> the moment it landed.
 
 ---
 
@@ -411,6 +458,8 @@ are cleared together by `resetTrackPhase()`:
 | | holds |
 |---|---|
 | `verdicts` (`VerdictLatch`) | the latched red/green verdict per joint |
+| `tilt` (`Tilt`) | which way is down, and whether the phone has been moved since calibration |
+| `calibration` (`CalibrationRun`) | a measurement in progress |
 | `holdTimer` (`HoldTimer`) | how much of the current hold is banked |
 | `coach` (`Coach`) | what has been said and when, so it is not said again |
 | `voice` (`Voice`) | the speech queue, the audio context, the remembered toggle |
@@ -437,7 +486,9 @@ an explicit `{type:"reset"}` message or a model reload.
 
 ### Persisted state
 
-One key: `yoga.audio` in `localStorage`, `"on"` or `"off"`. Every read and write
+Two keys in `localStorage`: `yoga.audio` (`"on"` / `"off"`), `yoga.safety`
+(whether the notice has been seen), and `yoga.calibration` (the measured bone
+lengths, versioned). Every read and write
 is wrapped, because `localStorage` throws outright in some privacy modes, and
 the default when it does is on.
 
@@ -478,6 +529,12 @@ tests that hold each one down are named after it.
 | An app giving physical-form feedback said nothing about what it can see | A first-run notice, and a standing line under the pose list |
 | `serve.py` gave a traceback for a taken port, a traceback for a missing `openssl`, reused an expired certificate forever, and served everything cacheable | All four fixed, and each tested by causing it |
 | No licence, so nobody could legally use any of it | MIT |
+| **Only joint angles were scored**, so a knee collapsing inward, a yawed pelvis and a body reflected front-to-back all scored 100 | Segment directions scored alongside, in the body frame, conditioned on what the camera resolves |
+| Limb lengths were re-estimated every frame from whatever angle the pose put each limb at, so the outline inherited the foreshortening it exists to correct | Bone lengths measured once from two views, reproducible to 2% |
+| One One Euro tuning for all three axes, with z four times noisier than x and y | z tuned separately: 47% less jitter, x and y untouched |
+| The three landmarker confidence thresholds sat at their defaults, unexamined | Set, each justified from what the app does with the output |
+| Nothing knew whether the camera was upright | Gravity from the IMU, with pitch and roll separated |
+| `evaluate()` lived in index.html and the suite carried a second copy, so the tests measured a pipeline nobody ran | One `scoring.js`, called by both |
 | The precache list was host-absolute, so a subpath deploy cached nothing at all | Relative paths, verified at a root and at `/yoga_app/` |
 | App shell and runtime shared a cache version, so any deploy re-downloaded the model | Versioned apart, both guarded by tests |
 | `updateTrackingUI` called with the wrong arity, working by accident | Fixed |
@@ -485,20 +542,26 @@ tests that hold each one down are named after it.
 
 ### Still open
 
-Three, none of them a correctness problem. Ordered by how much damage each does.
+Ordered by how much damage each does. None is a correctness problem in the
+scoring.
 
 1. **Rear camera flips the anatomy, not just the pixels.** The flip handler
    swaps `scaleX(-1)` on both video and canvas, keeping the overlay registered
    to the image. But the rig's `perp` vector assumes the user faces the camera.
-   Side detection now partly papers over this — a body filmed from behind
-   matches the mirrored variant, so the *shape* is right — but the side it
-   reports is then the wrong one, and the arrows still point the wrong way.
+   Side detection papers over the shape; the side it reports is then wrong, and
+   the arrows still point the wrong way.
 
-2. **`currentModel` exists in both modules** with different meanings, and the
+2. **The depth reconstruction is built and switched off.** Measured 19% better
+   overall and 54–77% better on a turned body, and not in the live path because
+   its whole measured benefit is against a synthetic model of MediaPipe's error.
+   See `LIMITS.md` §5. One line from being live, and it should not be until
+   there are real recordings.
+
+3. **`currentModel` exists in both modules** with different meanings, and the
    model picker markup is duplicated verbatim in two places, kept in sync by
    `renderModelToggles()` querying `[data-model-seg]` globally.
 
-3. **Per-frame allocation in the hot loop.** `reliableLandmarks` builds a `Set`
+4. **Per-frame allocation in the hot loop.** `reliableLandmarks` builds a `Set`
    and several closures per tick, and the side work now runs `matchSinglePose`
    twice. Negligible next to inference, but it is garbage on every frame.
 
@@ -512,11 +575,18 @@ forever, and no cache headers — are fixed, and each was tested by causing it.
 
 ## Where the fragility concentrates
 
-Nowhere in particular any more, which is a change. What is left is a short list,
-and none of it is a correctness problem in the scoring, the pump or the schema.
+Nowhere structural any more. What is left is a short list, and the honest
+summary of this codebase's risk is no longer about its code:
 
-Worth recording how the two worst bugs were actually found, because neither was
-found by reading code:
+**Everything is measured against a model.** 239 tests, an evaluation table and
+every constant in the scoring are calibrated against synthetic bodies and a
+synthetic model of landmark error. That is exact and reproducible and it is not
+evidence about a person. Two numbers in particular rest on it — the 4° direction
+tolerance, and the whole case for the depth reconstruction — and both would be
+the first things to re-derive from real recordings.
+
+Worth recording how the two worst bugs in this project's history were found,
+because neither was found by reading code:
 
 - The overlay was mapped to the screen differently from the video. It had been
   shipped, and looked at, and not seen — a desktop window is close enough to
@@ -525,6 +595,5 @@ found by reading code:
   while 145 pure-function tests stayed green.
 
 Both turned up from putting the real thing in front of a real browser and
-looking at what came back. The pure suite is 185 assertions now and still could
-not find either of them; `tests/smoke.sh` exists because a suite that cannot see
-the thing that is broken is worse company than none.
+looking at what came back. `tests/smoke.sh` exists because a suite that cannot
+see the thing that is broken is worse company than none.
