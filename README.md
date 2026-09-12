@@ -24,10 +24,17 @@ Everything runs on the device. No backend, no build step, no upload.
 - **Sessions.** Queue several poses and work through them hands-free. An
   asymmetric pose isn't finished until you've held both sides, and it works out
   which side you're doing rather than asking.
+- **Scores where your limbs point, not just how bent they are.** A knee that
+  collapses inward, hips that aren't square, an arm swung the wrong way — none
+  of which changes a single joint angle, and all of which a teacher would call
+  out first.
 - **Scores what it can actually see.** A joint that's off-screen is reported
   as unseen; a joint pointing down the camera axis is reported as *can't tell*
   rather than guessed at. The percentage comes with how much of the pose it
   was able to judge.
+- **Measures you once.** A short calibration — face the camera, turn side-on —
+  gets your bone lengths from two views, so the target outline stops breathing
+  as your limbs turn toward the lens.
 - **Live outline.** A dashed target rebuilt from your own limb lengths and
   pinned to your hips, so a correct pose lands on top of it. Red where a joint
   is out, green where it isn't.
@@ -130,12 +137,17 @@ notice, in `localStorage`.
 ```
 tests/run.sh      # the scoring core, the coaching policy, the pose schema
 tests/smoke.sh    # does pose detection actually run? (needs Chrome and a network)
+tests/eval.sh     # pose × fault × severity → score, against a committed baseline
 ```
 
-There is no Node on the machine this was built on, so the suite runs under
-JavaScriptCore's `jsc`. The second script exists because the first one cannot
-see a Worker, MediaPipe or WebGL — and was perfectly green while the landmarker
-failed to start.
+The suite runs under Node if you have it and JavaScriptCore's `jsc` if you
+don't — the machine this was built on has no Node, and jsc ships with macOS.
+The second script exists because the first cannot see a Worker, MediaPipe or
+WebGL, and was perfectly green while the landmarker failed to start for the
+app's entire history.
+
+Every fixture is synthetic. They prove the math does what it should; they prove
+nothing about a real body. `docs/LIMITS.md` is blunt about what that costs.
 
 ```
 tools/show-pose.sh downdog    # what shape does this rig actually make?
