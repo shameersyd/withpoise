@@ -1,6 +1,7 @@
 import { suite, test, assert, assertEqual, assertClose } from "./harness.js";
 import { OneEuroFilter, TUNING, makeFilters, smooth, VIS_THRESHOLD,
          FrameProcessor } from "../yoga_app/pose-core.js";
+import { seededRandom, gaussian, NOISE_XY, NOISE_Z_RATIO } from "./synthetic.js";
 
 suite("temporal smoothing");
 
@@ -248,4 +249,51 @@ test("resetting forgets the last body", () => {
   processor.reset();
   const afterReset = drive(moved, { timestamp: 100 + 41 * 33, processor }).results[0];
   assertClose(afterReset.landmarks[0].x, 0.9, 1e-9, "after a reset it does not");
+});
+
+suite("depth smoothing");
+
+/** Output jitter of a still landmark under the suite's noise model. */
+function jitterUnder(tuning) {
+  const filters = makeFilters(tuning);
+  const rand = seededRandom(5);
+  const xs = [], zs = [];
+  for (let i = 0; i < 200; i++) {
+    const pts = Array.from({ length: 33 }, () => ({
+      x: 0.5 + gaussian(rand) * NOISE_XY,
+      y: 0.5 + gaussian(rand) * NOISE_XY,
+      z: gaussian(rand) * NOISE_XY * NOISE_Z_RATIO,
+      visibility: 1,
+    }));
+    const out = smooth(pts, filters, i * FRAME);
+    if (i > 60) { xs.push(out[0].x); zs.push(out[0].z); }
+  }
+  const sd = (a) => {
+    const mean = a.reduce((p, c) => p + c, 0) / a.length;
+    return Math.sqrt(a.reduce((p, c) => p + (c - mean) ** 2, 0) / a.length);
+  };
+  return { x: sd(xs), z: sd(zs) };
+}
+
+test("z is smoothed harder than x and y, because it is noisier than x and y", () => {
+  // One cutoff for all three axes means choosing between a laggy x/y and a
+  // jittery z. Measured under the noise model: a shared cutoff leaves z jitter
+  // at 3.5× x/y, a separate one at 1.9×, and x is untouched either way.
+  const shared = jitterUnder({ minCutoff: 1.1, beta: 0.30, dCutoff: 1.0 });
+  const split = jitterUnder(TUNING.world);
+
+  assertClose(split.x, shared.x, 1e-9, "x is not affected");
+  assert(split.z < shared.z * 0.6,
+    `z jitter ${split.z.toFixed(5)} vs ${shared.z.toFixed(5)}`);
+  assert(split.z / split.x < 2.2,
+    `z is still ${(split.z / split.x).toFixed(1)}× x after smoothing`);
+});
+
+test("a tuning with no z block treats all three axes alike", () => {
+  // The fallback matters: makeFilters is called from tests and from the worker
+  // with whatever it is handed, and a missing z block must not mean no filter.
+  const flat = { minCutoff: 1.1, beta: 0.3, dCutoff: 1.0 };
+  const filters = makeFilters(flat);
+  assertEqual(filters[0].z.minCutoff, flat.minCutoff);
+  assertEqual(makeFilters(TUNING.world)[0].z.minCutoff, TUNING.world.z.minCutoff);
 });

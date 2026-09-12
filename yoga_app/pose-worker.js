@@ -124,6 +124,29 @@ async function createLandmarker(vision, bytes, delegate) {
     baseOptions: { modelAssetBuffer: new Uint8Array(bytes), delegate },
     runningMode: "VIDEO",
     numPoses: 1,
+
+    // All three default to 0.5 and were being left there. They are set here
+    // because the right values follow from what this app does with the output,
+    // and that is not the same for every app.
+    //
+    // Detection is raised: this is the gate on deciding a person is present at
+    // all, and a false positive starts a count-in on a coat rack. The app has
+    // a framing phase that can afford to wait a moment longer for a real body.
+    minPoseDetectionConfidence: 0.6,
+
+    // Presence stays at the default. Whether a pose is present in a frame is a
+    // question the app answers better than the landmarker can — it has
+    // per-landmark visibility, a coverage measure and a lost-body phase, all
+    // of which want the observation rather than a suppressed one.
+    minPosePresenceConfidence: 0.5,
+
+    // Tracking is lowered: once a body is found, keeping hold of it matters
+    // more than the quality of any single frame. Dropping tracking forces a
+    // fresh detection, which costs a frame and restarts the smoothing; a
+    // low-confidence frame costs nothing, because low-visibility landmarks are
+    // already held rather than believed and the hold timer has its own grace.
+    // A held yoga pose is the easiest thing in the world to keep tracking.
+    minTrackingConfidence: 0.4,
   });
 }
 

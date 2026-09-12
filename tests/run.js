@@ -7,5 +7,7 @@ import "./coach.test.js";
 import "./pacing.test.js";
 import "./schema.test.js";
 import "./spatial.test.js";
+import "./gravity.test.js";
+import "./calibration.test.js";
 
 run();
