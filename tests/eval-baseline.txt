@@ -11,38 +11,38 @@
   mountain  valgus         60    100.0    100%  —
   mountain  pelvisYaw      15    100.0    100%  —
   mountain  pelvisYaw      30    100.0    100%  —
-  mountain  pelvisYaw      45    100.0    100%  —
-  mountain  armSwing       30    100.0    100%  —
-  mountain  armSwing       45    100.0    100%  —
-  mountain  armSwing       90    100.0    100%  —
+  mountain  pelvisYaw      45     94.1    100%  Square your hips towards the front
+  mountain  armSwing       30     99.9    100%  Take your left hand back
+  mountain  armSwing       45     96.6    100%  Take your left hand back
+  mountain  armSwing       90     92.3    100%  Take your left elbow back
   mountain  depthMirror     —    100.0    100%  —
-  mountain  noise           —     99.7    100%  Open your left hip more
+  mountain  noise           —    100.0    100%  —
 
   warrior1  none            —    100.0    100%  —
   warrior1  valgus         15    100.0    100%  —
-  warrior1  valgus         30    100.0    100%  —
-  warrior1  valgus         45    100.0    100%  —
-  warrior1  valgus         60    100.0    100%  —
-  warrior1  pelvisYaw      15    100.0    100%  —
-  warrior1  pelvisYaw      30    100.0    100%  —
-  warrior1  pelvisYaw      45    100.0    100%  —
+  warrior1  valgus         30     91.3    100%  Track your left knee back
+  warrior1  valgus         45     83.3    100%  Track your left knee back
+  warrior1  valgus         60     83.3    100%  Track your left knee back
+  warrior1  pelvisYaw      15     99.7    100%  Take your left knee forward
+  warrior1  pelvisYaw      30     89.6    100%  Square your hips towards the front
+  warrior1  pelvisYaw      45     82.1    100%  Square your hips towards the front
   warrior1  armSwing       30    100.0    100%  —
   warrior1  armSwing       45    100.0    100%  —
-  warrior1  armSwing       90    100.0    100%  —
+  warrior1  armSwing       90     94.2    100%  Take your left elbow further out to the side
   warrior1  depthMirror     —    100.0    100%  —
   warrior1  noise           —    100.0    100%  —
 
   warrior2  none            —    100.0    100%  —
   warrior2  valgus         15    100.0    100%  —
-  warrior2  valgus         30    100.0    100%  —
-  warrior2  valgus         45    100.0    100%  —
-  warrior2  valgus         60    100.0    100%  —
-  warrior2  pelvisYaw      15    100.0    100%  —
-  warrior2  pelvisYaw      30    100.0    100%  —
-  warrior2  pelvisYaw      45    100.0     63%  —
-  warrior2  armSwing       30    100.0    100%  —
-  warrior2  armSwing       45    100.0     81%  —
-  warrior2  armSwing       90    100.0     81%  —
+  warrior2  valgus         30     91.3    100%  Track your left knee back
+  warrior2  valgus         45     83.3    100%  Track your left knee back
+  warrior2  valgus         60     83.3    100%  Track your left knee back
+  warrior2  pelvisYaw      15     99.6    100%  Take your left knee forward
+  warrior2  pelvisYaw      30     82.9    100%  Square your hips towards the front
+  warrior2  pelvisYaw      45     70.0     83%  Square your hips towards the front
+  warrior2  armSwing       30     91.7    100%  Take your left elbow back
+  warrior2  armSwing       45     90.9     92%  Take your left elbow back
+  warrior2  armSwing       90     90.9     92%  Take your left elbow further out to the side
   warrior2  depthMirror     —    100.0    100%  —
   warrior2  noise           —    100.0    100%  —
 
@@ -51,27 +51,27 @@
   tree      valgus         30    100.0    100%  —
   tree      valgus         45    100.0    100%  —
   tree      valgus         60    100.0    100%  —
-  tree      pelvisYaw      15    100.0    100%  —
-  tree      pelvisYaw      30    100.0    100%  —
-  tree      pelvisYaw      45    100.0    100%  —
+  tree      pelvisYaw      15    100.0    100%  Take your right knee back
+  tree      pelvisYaw      30     87.8    100%  Track your right knee back
+  tree      pelvisYaw      45     83.9    100%  Square your hips towards the front
   tree      armSwing       30    100.0    100%  —
   tree      armSwing       45    100.0    100%  —
-  tree      armSwing       90    100.0    100%  —
+  tree      armSwing       90     96.6    100%  Take your left elbow further out to the side
   tree      depthMirror     —    100.0    100%  —
-  tree      noise           —     99.6    100%  Open your left hip more
+  tree      noise           —    100.0    100%  —
 
   downdog   none            —    100.0    100%  —
   downdog   valgus         15    100.0    100%  —
   downdog   valgus         30    100.0    100%  —
   downdog   valgus         45    100.0    100%  —
   downdog   valgus         60    100.0    100%  —
-  downdog   pelvisYaw      15    100.0    100%  —
-  downdog   pelvisYaw      30    100.0    100%  —
-  downdog   pelvisYaw      45    100.0    100%  —
-  downdog   armSwing       30    100.0    100%  —
-  downdog   armSwing       45    100.0    100%  —
-  downdog   armSwing       90     87.5    100%  Raise your left arm
-  downdog   depthMirror     —    100.0    100%  —
+  downdog   pelvisYaw      15     93.2    100%  Square your hips towards the front
+  downdog   pelvisYaw      30    100.0     64%  —
+  downdog   pelvisYaw      45    100.0     64%  —
+  downdog   armSwing       30     99.4    100%  Take your left elbow in towards your midline
+  downdog   armSwing       45     87.1    100%  Take your left elbow in towards your midline
+  downdog   armSwing       90     80.6    100%  Raise your left arm
+  downdog   depthMirror     —     70.9    100%  Take your left hand forward
   downdog   noise           —    100.0    100%  —
 
   triangle  none            —    100.0    100%  —
@@ -80,11 +80,11 @@
   triangle  valgus         45    100.0    100%  —
   triangle  valgus         60    100.0    100%  —
   triangle  pelvisYaw      15    100.0    100%  —
-  triangle  pelvisYaw      30    100.0    100%  —
-  triangle  pelvisYaw      45    100.0     35%  —
-  triangle  armSwing       30    100.0    100%  —
-  triangle  armSwing       45    100.0    100%  —
-  triangle  armSwing       90     99.4    100%  Raise your left arm
+  triangle  pelvisYaw      30     80.1    100%  Square your hips towards the front
+  triangle  pelvisYaw      45     54.7     71%  Square your hips towards the front
+  triangle  armSwing       30     97.4    100%  Take your left elbow back
+  triangle  armSwing       45     92.0    100%  Take your left elbow back
+  triangle  armSwing       90     91.7    100%  Take your left elbow back
   triangle  depthMirror     —    100.0    100%  —
   triangle  noise           —    100.0    100%  —
 

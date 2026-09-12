@@ -15,6 +15,8 @@
 
 import {
   ANGLE_JOINTS, buildReference, computeAngles, figureLandmarks,
+  SEGMENT_NAMES, segmentDirections, bodyFrame,
+  DIRECTION_TOLERANCE, DIRECTION_MARGIN,
 } from "./pose-core.js";
 
 export const JOINT_NAMES = Object.keys(ANGLE_JOINTS);
@@ -35,8 +37,25 @@ export const FOCUS_PARTS = ["torso", "head", "left_arm", "right_arm", "left_leg"
  */
 export const VIEWS = ["front", "side"];
 
+// Which joint's weight a segment inherits when the pose does not say. The far
+// end of the segment is the part that moves, so it is the joint that governs
+// it: a thigh and a shin are both about the knee, an upper arm is about the
+// shoulder, a forearm about the elbow. The torso answers to the hips.
+export const SEGMENT_WEIGHT_SOURCE = {
+  torso: null,
+  upper_arm_left: "left_shoulder",
+  upper_arm_right: "right_shoulder",
+  forearm_left: "left_elbow",
+  forearm_right: "right_elbow",
+  thigh_left: "left_knee",
+  thigh_right: "right_knee",
+  shin_left: "left_knee",
+  shin_right: "right_knee",
+};
+
 export const DEFAULT_TOLERANCE = 25;
 export const DEFAULT_WEIGHT = 1;
+export { DIRECTION_TOLERANCE };
 
 const isFiniteNumber = (v) => typeof v === "number" && Number.isFinite(v);
 const isDirection = (v) =>
@@ -46,6 +65,18 @@ const isDirection = (v) =>
 /** The eight target angles this rig implies, in degrees. */
 export function deriveTargets(rig, view) {
   return computeAngles(figureLandmarks(buildReference(rig, null, view)), null, 1, 1);
+}
+
+/**
+ * The nine target segment directions this rig implies, in the body frame.
+ *
+ * From the same rig as the angles, for the same reason: a pose describes its
+ * shape once. Adding a second, hand-written description of where each limb
+ * points would reintroduce exactly the drift the derived angles removed.
+ */
+export function deriveSegmentTargets(rig, view) {
+  const world = figureLandmarks(buildReference(rig, null, view));
+  return segmentDirections(world, bodyFrame(world));
 }
 
 /**
@@ -175,6 +206,36 @@ export function validatePose(key, pose) {
     }
   }
 
+  // ── segments ──
+  if (pose.segments !== undefined) {
+    if (typeof pose.segments !== "object" || pose.segments === null) {
+      bad("segments", "must be an object");
+    } else {
+      for (const [name, spec] of Object.entries(pose.segments)) {
+        if (name !== "default" && !SEGMENT_NAMES.includes(name)) {
+          bad("segments", `has unknown segment "${name}" — expected one of ${SEGMENT_NAMES.join(", ")}`);
+          continue;
+        }
+        if (!spec || typeof spec !== "object") {
+          bad(`segments.${name}`, "must be an object with tolerance and/or weight");
+          continue;
+        }
+        if (spec.tolerance !== undefined &&
+            (!isFiniteNumber(spec.tolerance) || spec.tolerance <= 0 || spec.tolerance > 90)) {
+          bad(`segments.${name}.tolerance`, "must be a number of degrees between 0 and 90");
+        }
+        if (spec.weight !== undefined && (!isFiniteNumber(spec.weight) || spec.weight < 0)) {
+          bad(`segments.${name}.weight`, "must be a number of 0 or more");
+        }
+        for (const extra of Object.keys(spec)) {
+          if (extra !== "tolerance" && extra !== "weight") {
+            bad(`segments.${name}`, `has unknown field "${extra}"`);
+          }
+        }
+      }
+    }
+  }
+
   // ── the shape the rig actually produces ──
   // A rig can be well-formed and still describe nothing: a limb folded exactly
   // onto itself, a direction of NaN. Building it is the only way to find out.
@@ -200,6 +261,7 @@ export function validatePose(key, pose) {
 export function compilePose(key, pose) {
   const view = pose.view || "front";
   const targets = deriveTargets(pose.rig, view);
+  const segmentTargets = deriveSegmentTargets(pose.rig, view);
   const specs = pose.joints || {};
   const fallback = specs.default || {};
 
@@ -212,7 +274,29 @@ export function compilePose(key, pose) {
     weights[joint] = spec.weight ?? fallback.weight ?? DEFAULT_WEIGHT;
   }
 
-  return { ...pose, key, view, angles, weights };
+  // A segment's default weight is the weight of the joint at its far end.
+  //
+  // Which means every pose already says how much each segment matters, in the
+  // joint weights it was written with — Tree's standing leg is a 3 and its
+  // elbow a 1, and the thigh and shin inherit that without anyone editing a
+  // file. A pose can still override any of it.
+  const segmentSpecs = { ...(pose.segments || {}) };
+  for (const [name, joint] of Object.entries(SEGMENT_WEIGHT_SOURCE)) {
+    const given = segmentSpecs[name] || {};
+    if (given.weight === undefined) {
+      const inherited = joint === null
+        ? (weights.left_hip + weights.right_hip) / 2
+        : weights[joint];
+      segmentSpecs[name] = { ...given, weight: inherited };
+    }
+  }
+
+  return {
+    ...pose, key, view, angles, weights,
+    segmentTargets,
+    segmentSpecs,
+    directionMargin: DIRECTION_MARGIN,
+  };
 }
 
 /**

@@ -163,9 +163,11 @@ export class Session {
 export function rankCorrections(corrections, results) {
   return [...corrections]
     .map((c) => {
+      // A correction may carry its own weight and quality — a named fault
+      // spanning several segments has no single entry in `results` to look up.
       const r = (results && results[c.joint]) || {};
-      const weight = r.weight ?? 1;
-      const quality = r.quality ?? 0;
+      const weight = c.weight ?? r.weight ?? 1;
+      const quality = c.quality ?? r.quality ?? 0;
       return { ...c, severity: weight * (1 - quality) };
     })
     .sort((a, b) => b.severity - a.severity);

@@ -341,10 +341,17 @@ export const TURN_LIMIT_DEGREES = 55;
 // And the mirror of it, for a pose that only exists side-on: below this much
 // turn the user is too square to the camera for the pose to be legible at all.
 //
-// The reading is conservative. Depth compression flattens the body towards the
-// image plane, so a user genuinely at 10° to the camera reads as around 47°,
-// and the threshold has to sit above that to fire at all.
-export const SIDE_MIN_TURN_DEGREES = 50;
+// The reading under-reads, consistently. Running the suite's compression model
+// through bodyFrame: a body genuinely 30° from the camera reports 22°, 50°
+// reports 46°, 60° reports 54°. Standing side-on reports 88–90°.
+//
+// A side-on pose stops being readable well before the user is square. Measured
+// on Downward Dog, 30° off its view — reported 54° — puts 22° of error into
+// every leg segment with no noise present at all, because the compression is
+// distorting the body frame itself. So the bar is 60: it clears a genuine
+// side-on stance with room, and catches the point at which the frame stops
+// being trustworthy.
+export const SIDE_MIN_TURN_DEGREES = 60;
 
 /** Is the user standing the way this pose needs them to? */
 export function facingWrongWay(view, turnDegrees) {
@@ -419,6 +426,354 @@ export function jointMeasurability(world, frame) {
     out[joint] = { depthShare: share, measurable: share <= AXIS_LIMIT };
   }
   return out;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Segment directions
+//
+// A joint angle says how bent a limb is. It says nothing about where the limb
+// points, because an angle is invariant to rotation — which is why a knee can
+// collapse 13cm inward, or both arms swing 90° forward, without moving any of
+// the eight numbers the app scored.
+//
+// The rig has always described each segment's *direction*. Those directions
+// were used to derive the target angles and then discarded. Scoring them is
+// strictly more information, and it is the same information a teacher uses.
+// ─────────────────────────────────────────────────────────────
+
+/** Landmark names, plus the two midpoints that behave like landmarks. */
+export function landmarkPoint(world, name) {
+  if (name === "shoulder_centre") return v3.mid(world[LM.left_shoulder], world[LM.right_shoulder]);
+  if (name === "hip_centre") return v3.mid(world[LM.left_hip], world[LM.right_hip]);
+  return world[LM[name]];
+}
+
+/** Every landmark a named point actually depends on. */
+export function pointDependencies(name) {
+  if (name === "shoulder_centre") return ["left_shoulder", "right_shoulder"];
+  if (name === "hip_centre") return ["left_hip", "right_hip"];
+  return [name];
+}
+
+export const SEGMENTS = {
+  torso:           ["hip_centre", "shoulder_centre"],
+  upper_arm_left:  ["left_shoulder", "left_elbow"],
+  upper_arm_right: ["right_shoulder", "right_elbow"],
+  forearm_left:    ["left_elbow", "left_wrist"],
+  forearm_right:   ["right_elbow", "right_wrist"],
+  thigh_left:      ["left_hip", "left_knee"],
+  thigh_right:     ["right_hip", "right_knee"],
+  shin_left:       ["left_knee", "left_ankle"],
+  shin_right:      ["right_knee", "right_ankle"],
+};
+
+export const SEGMENT_NAMES = Object.keys(SEGMENTS);
+
+/**
+ * Each segment's direction, as a unit vector in the body's own frame.
+ *
+ * The body frame is what makes this comparable at all: it is built from the
+ * user's hips and shoulders, so it turns with them. A pose held correctly
+ * produces the same directions whether the user faces the camera or stands at
+ * 30° to it, which is the invariance the app already has and must not lose.
+ */
+export function segmentDirections(world, frame) {
+  const f = frame || bodyFrame(world);
+  const out = {};
+  for (const [name, [from, to]] of Object.entries(SEGMENTS)) {
+    const vector = v3.sub(landmarkPoint(world, to), landmarkPoint(world, from));
+    if (v3.len(vector) < 1e-9) { out[name] = null; continue; }
+    out[name] = {
+      // In the body frame: lateral, up the spine, out of the chest.
+      x: v3.dot(vector, f.lateral),
+      y: v3.dot(vector, f.spine),
+      z: v3.dot(vector, f.forward),
+      // Kept in camera coordinates too, because how well the camera resolved
+      // this segment is a question about the camera, not about the body.
+      camera: vector,
+    };
+  }
+  for (const name of SEGMENT_NAMES) {
+    if (out[name]) {
+      const d = out[name];
+      const n = Math.hypot(d.x, d.y, d.z) || 1;
+      out[name] = { x: d.x / n, y: d.y / n, z: d.z / n, camera: d.camera };
+    }
+  }
+  return out;
+}
+
+// How much less a depth error counts than an in-plane one.
+//
+// From the error profile rather than from taste. MediaPipe's z is roughly four
+// times noisier than its x and y, so a given displacement along the camera axis
+// is worth about a quarter of the same displacement across the image as
+// evidence. Errors are scaled into "in-plane-equivalent" degrees by this
+// before being judged, which lets one tolerance cover both.
+//
+// Note what this is not: it is not zero. Projecting the depth component away
+// entirely was the first attempt and it fails on the most important fault
+// there is. Warrior I holds its legs spread in the frontal plane, so a knee
+// collapsing inward travels toward the camera — 20° of direction error, all of
+// it in depth. Discarding depth discards the fault. A knee 13cm out of place
+// against 4.6cm of depth noise is a three-sigma signal; attenuated, not
+// deleted.
+export const DEPTH_TRUST = 0.25;
+
+/**
+ * How far an observed segment points from where it should, in degrees,
+ * discounted by how well the camera can resolve the direction it moved.
+ *
+ * The error between the two unit directions is split into the part across the
+ * image and the part along the camera axis. The first is measured; the second
+ * is largely inferred, so it is scaled by DEPTH_TRUST before the two are
+ * recombined. The result is in the units of an in-plane error, which is what
+ * makes a single tolerance meaningful.
+ *
+ * `resolved` reports how much of the *target* direction lies across the image.
+ * A segment pointing almost straight down the lens has nothing left to compare
+ * and is reported unmeasurable rather than scored — the same answer, for the
+ * same reason, as the joint gate gives.
+ */
+export function directionError(observed, target, frame) {
+  if (!observed || !target) return { degrees: 0, resolved: 0, measurable: false };
+
+  // The camera axis in body coordinates. Same reconstruction as depthShare:
+  // sin(turn) along lateral plus cos(turn) along forward, using the body frame
+  // rather than the raw z, because the raw z is what depth compression eats.
+  const cosTurn = frame.facing;
+  const sinTurn = Math.sqrt(Math.max(0, 1 - frame.facing * frame.facing));
+  const axis = { x: sinTurn, y: 0, z: cosTurn };
+
+  const error = {
+    x: observed.x - target.x,
+    y: observed.y - target.y,
+    z: observed.z - target.z,
+  };
+  const along = error.x * axis.x + error.y * axis.y + error.z * axis.z;
+  const across = Math.hypot(
+    error.x - along * axis.x,
+    error.y - along * axis.y,
+    error.z - along * axis.z,
+  );
+
+  // Chord length back to an angle: two unit vectors |e| apart subtend
+  // 2·asin(|e|/2).
+  const discounted = Math.hypot(across, along * DEPTH_TRUST);
+  const degrees = 2 * Math.asin(Math.min(1, discounted / 2)) * 180 / Math.PI;
+
+  const targetAlong = target.x * axis.x + target.y * axis.y + target.z * axis.z;
+  const resolved = Math.sqrt(Math.max(0, 1 - targetAlong * targetAlong));
+
+  return { degrees, resolved, measurable: resolved >= RESOLVED_LIMIT };
+}
+
+// How much of a segment has to survive the projection onto the image plane
+// before its direction is worth scoring.
+//
+// A segment resolving 0.4 lies 66° from the camera axis. Below that almost
+// nothing of where it points is visible across the image, the comparison rests
+// on the depth estimate alone, and the honest answer is "can't tell" — the same
+// answer, for the same reason, as the joint gate's AXIS_LIMIT.
+export const RESOLVED_LIMIT = 0.4;
+
+// How far a segment may point from its target and still be called correct.
+//
+// Set from the measured separation, through the smoothing the app applies. Per
+// segment, on Warrior I:
+//
+//     a correct pose under the noise model     0.7 – 1.5°
+//     the same pose seen 30° off-axis          1.3 – 1.9°
+//     a knee collapsed 30° inward              7.1°  (thigh and shin both)
+//     the same at 45°                         13.3°
+//     a pelvis yawed 30°                       6.0 – 11.0°
+//
+// 4° sits at 2.7× the noise floor and well under half the smallest fault. It
+// is far tighter than the 20–30° the joint angles carry and it can be: those
+// measure a quantity that is mostly depth noise, and this one is conditioned on
+// what the camera resolves before it is judged.
+//
+// The honest caveat is that the noise floor above comes from the suite's model
+// of landmark error, not from a real body. If real jitter is worse, this is the
+// number to revisit first.
+export const DIRECTION_TOLERANCE = 4;
+
+// And a narrow falloff to match: a segment 10° out is not partly right.
+export const DIRECTION_MARGIN = 6;
+
+// The far end of each segment — the part of the body a person moves when they
+// change that segment's direction. You do not tell someone to move their thigh.
+export const SEGMENT_PARTS = {
+  torso:           { part: "chest", side: null },
+  upper_arm_left:  { part: "left elbow", side: "left" },
+  upper_arm_right: { part: "right elbow", side: "right" },
+  forearm_left:    { part: "left hand", side: "left" },
+  forearm_right:   { part: "right hand", side: "right" },
+  thigh_left:      { part: "left knee", side: "left" },
+  thigh_right:     { part: "right knee", side: "right" },
+  shin_left:       { part: "left foot", side: "left" },
+  shin_right:      { part: "right foot", side: "right" },
+};
+
+/**
+ * What to do about a segment pointing the wrong way, as an instruction.
+ *
+ * Derived rather than tabulated: the correction is the direction the far end
+ * has to travel, expressed in the body's own frame, and only the dominant axis
+ * is named. One thing to do at a time is the standing rule of the coaching
+ * layer and it applies just as much here.
+ *
+ * "Out" and "in" are relative to the body's midline, so they mean the same
+ * thing for a left limb and a right one — which is what makes the phrasing
+ * work without a table of special cases.
+ */
+export function segmentCorrection(name, observed, target) {
+  const meta = SEGMENT_PARTS[name];
+  if (!meta || !observed || !target) return null;
+
+  const delta = { x: target.x - observed.x, y: target.y - observed.y, z: target.z - observed.z };
+  const axes = [
+    { size: Math.abs(delta.x), axis: "lateral", positive: delta.x > 0 },
+    { size: Math.abs(delta.y), axis: "vertical", positive: delta.y > 0 },
+    { size: Math.abs(delta.z), axis: "forward", positive: delta.z > 0 },
+  ].sort((a, b) => b.size - a.size);
+
+  const dominant = axes[0];
+  let where;
+  if (dominant.axis === "vertical") {
+    where = dominant.positive ? "higher" : "lower";
+  } else if (dominant.axis === "forward") {
+    where = dominant.positive ? "forward" : "back";
+  } else {
+    // The body's lateral axis points to its own left, so which way is "out"
+    // depends on which side the limb is on.
+    const outward = meta.side === "right" ? !dominant.positive : dominant.positive;
+    where = outward ? "further out to the side" : "in towards your midline";
+  }
+
+  const verb = dominant.axis === "vertical" && dominant.positive ? "Lift" : "Take";
+  return `${verb} your ${meta.part} ${where}`;
+}
+
+/**
+ * Name the fault, where several segments are telling one story.
+ *
+ * A segment-by-segment reading is accurate and is not always what a person can
+ * act on. Yawing a pelvis moves both thighs and leaves the torso untouched — it
+ * is measured on the legs and it is not a leg problem — so reporting "take your
+ * left knee forward" is true, useless, and would have them chasing the symptom.
+ *
+ * Two patterns, each with a signature distinct enough to read off the segments:
+ *
+ *   hips not square   both thighs wrong. Yawing the pelvis swings one hip
+ *                     forward and the other back, so the two thigh directions
+ *                     move in opposite senses and the torso, rotating with the
+ *                     pelvis, does not move at all.
+ *   knee tracking     one leg only, thigh and shin moved in opposite senses —
+ *                     the signature of a knee swinging about the line from hip
+ *                     to ankle while the foot stays planted.
+ *
+ * Anything else keeps its own per-segment instruction.
+ */
+export function recogniseFaults(results, observed, targets) {
+  const failing = (name) => results[name] && !results[name].ok;
+  const drift = (name) => (observed[name] && targets[name])
+    ? observed[name].z - targets[name].z : 0;
+  const worst = (names) => names
+    .map(n => results[n])
+    .filter(Boolean)
+    .sort((a, b) => a.quality - b.quality)[0];
+
+  const found = [];
+
+  if (failing("thigh_left") && failing("thigh_right")) {
+    const source = worst(["thigh_left", "thigh_right"]);
+    found.push({
+      joint: "pelvis",
+      text: "Square your hips towards the front",
+      weight: source.weight, quality: source.quality,
+      explains: ["thigh_left", "thigh_right"],
+    });
+    return found;
+  }
+
+  for (const side of ["left", "right"]) {
+    const thigh = `thigh_${side}`, shin = `shin_${side}`;
+    if (!failing(thigh) || !failing(shin)) continue;
+    if (drift(thigh) * drift(shin) >= 0) continue;      // not a rotation about the leg
+    const source = worst([thigh, shin]);
+    found.push({
+      joint: thigh,
+      // "Track" rather than "take": it is the word a teacher uses for a knee,
+      // and the direction is still the derived one rather than an assumption
+      // that every knee fault is an inward collapse.
+      text: (segmentCorrection(thigh, observed[thigh], targets[thigh]) || "")
+        .replace(/^Take your /, "Track your ").replace(/^Lift your /, "Track your "),
+      weight: source.weight, quality: source.quality,
+      explains: [thigh, shin],
+    });
+  }
+
+  return found;
+}
+
+/**
+ * Score every segment direction against its target.
+ *
+ * Deliberately the same shape as matchSinglePose, because it is the same idea
+ * applied to a different measurement, and the two are summed into one score.
+ *
+ * opts: { specs: { [segment]: { tolerance, weight } }, margin, reliable }
+ */
+export function matchSegments(observed, targets, frame, opts = {}) {
+  const { specs = {}, margin = FALLOFF_MARGIN, reliable = null } = opts;
+  const results = {};
+  const unscored = [];
+  const uncertain = [];
+
+  for (const name of SEGMENT_NAMES) {
+    const target = targets && targets[name];
+    if (!target) continue;
+
+    const spec = specs[name] || specs.default || {};
+    const weight = spec.weight ?? 1;
+    if (weight === 0) continue;
+
+    if (reliable) {
+      const needed = SEGMENTS[name].flatMap(pointDependencies);
+      if (!needed.every(n => reliable.has(n))) { unscored.push(name); continue; }
+    }
+
+    const seen = observed && observed[name];
+    if (!seen) { unscored.push(name); continue; }
+
+    const error = directionError(seen, target, frame);
+    if (!error.measurable) { uncertain.push(name); continue; }
+
+    // Widen the tolerance for a segment the camera can only half see.
+    //
+    // `resolved` is the fraction of the target direction lying across the
+    // image. At 1 the whole direction is visible and the tolerance is the
+    // measured one; at 0.5 half of it is inferred and the residual is
+    // correspondingly less certain, so the bar moves with it. Without this a
+    // marginally-resolved segment is held to a standard its measurement cannot
+    // support, and a correct pose seen from an awkward angle reads as a fault —
+    // which is the exact failure this whole approach exists to avoid.
+    const base = spec.tolerance ?? DIRECTION_TOLERANCE;
+    const tolerance = base / Math.max(error.resolved, RESOLVED_LIMIT);
+
+    results[name] = {
+      degrees: error.degrees,
+      resolved: error.resolved,
+      tolerance,
+      weight,
+      quality: jointQuality(error.degrees, tolerance, margin),
+      ok: error.degrees <= tolerance,
+      correction: segmentCorrection(name, seen, target),
+    };
+  }
+
+  return { results, unscored, uncertain };
 }
 
 /**

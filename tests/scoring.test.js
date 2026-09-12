@@ -214,11 +214,20 @@ test("standing the wrong way for the pose is reported as a turn to make", () => 
     assert(facingWrongWay(YOGA_POSES[key].view, r.frame.turnDegrees),
       `${key} reads ${r.frame.turnDegrees.toFixed(0)}° and no warning fires`);
   }
-  for (const key of POSES) {
+  // A front pose 30° off square is a mild inconvenience and must not warn.
+  for (const key of POSES.filter(k => YOGA_POSES[k].view === "front")) {
     const r = score(key, "turned");
-    assert(!facingWrongWay(YOGA_POSES[key].view, r.frame.turnDegrees),
+    assert(!facingWrongWay("front", r.frame.turnDegrees),
       `${key} at 30° off should not warn, reads ${r.frame.turnDegrees.toFixed(0)}°`);
   }
+
+  // A side-on pose 30° off is not. Measured on Downward Dog, that angle alone
+  // puts 22° of error into every leg segment with no noise present, because the
+  // compression is distorting the body frame the directions are read in. The
+  // app asks the user to turn rather than pretending to judge them.
+  const sideways = score("downdog", "turned");
+  assert(facingWrongWay("side", sideways.frame.turnDegrees),
+    `Downward Dog 30° off its view reads ${sideways.frame.turnDegrees.toFixed(0)}° and does not warn`);
 });
 
 test("turning side-on costs the frontal plane and keeps the sagittal one", () => {

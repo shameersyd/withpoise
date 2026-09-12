@@ -14,7 +14,8 @@
  */
 
 import { say } from "./platform.js";
-import { sidesOf, buildReference, reliableLandmarks } from "../yoga_app/pose-core.js";
+import { sidesOf, buildReference, reliableLandmarks, makeFilters, smooth, TUNING }
+  from "../yoga_app/pose-core.js";
 import { scoreObservation } from "../yoga_app/scoring.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 import { observe, valgus, pelvisYaw, limbSwing, depthMirror } from "./synthetic.js";
@@ -44,7 +45,21 @@ const variantsOf = (pose) => sidesOf(pose).map((p) => ({
 }));
 
 function run(pose, make, degrees, noise) {
-  const { image, world } = observe(pose, { fault: make(degrees), noise });
+  const fault = make(degrees);
+
+  // A noisy case is run as a sequence through the One Euro smoothing the worker
+  // applies, because that is the only kind of landmark the app has ever seen. A
+  // single unsmoothed frame carries several times the direction noise and would
+  // put a number in this table that nothing in the app can produce.
+  const filters = makeFilters(TUNING.world);
+  const frames = noise ? 70 : 1;
+  let image = null, world = null;
+  for (let i = 0; i < frames; i++) {
+    const seen = observe(pose, { fault, noise: noise ? { seed: noise.seed + i * 17 } : undefined });
+    image = seen.image;
+    world = noise ? smooth(seen.world, filters, i / 30) : seen.world;
+  }
+
   const { match } = scoreObservation({ landmarks: image, world }, {
     variants: variantsOf(pose),
     tips: CORRECTION_TIPS,
