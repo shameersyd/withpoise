@@ -1,54 +1,30 @@
 /**
- * Fixture generator.
+ * Writes the canonical fixtures: each pose held correctly, held with one known
+ * fault, seen from the wrong angle, and seen half out of frame.
  *
- * ── What these fixtures are, and what they are not ──────────────────────────
- *
- * They are SYNTHETIC. There is no camera in this toolchain, so every fixture is
- * built by posing the rig from poses.js and reading the joints back out. That
- * makes them exact, deterministic and diffable, and it means they pin down the
- * behaviour of *our* code precisely.
- *
- * It also means they contain none of MediaPipe's own error. A synthetic body is
- * a body the landmarker got perfectly right. So these fixtures can prove that
- * the scoring math does what we think it does; they cannot prove the app works
- * on a real person, and no amount of them ever will.
- *
- * The one place we deliberately model a real failure is the `edgeOn` variant:
- * a rigid rotation alone would change no 3D angle at all (the math is already
- * rotation-invariant), so it also compresses the depth axis, which is the
- * characteristic error of a monocular depth regressor looking at a body turned
- * away from it. The compression factor is a stand-in, not a measurement.
+ * The bodies themselves — and the geometry that faults them — live in
+ * synthetic.js, which explains at length what a synthetic fixture is worth.
+ * The spatial faults are deliberately NOT written out here: a severity curve
+ * across six poses and four faults is hundreds of landmark arrays that nobody
+ * will ever read, and they are reproducible from the rig on demand. See
+ * tests/eval.js.
  *
  * Run via tests/make-fixtures.sh.
  */
 
-import { LM, buildReference } from "../yoga_app/pose-core.js";
+import { buildReference } from "../yoga_app/pose-core.js";
 import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 import { validatePose } from "../yoga_app/pose-schema.js";
-
-// Rig units → metres. The rig's torso is 0.26 long; a real shoulder-to-hip span
-// is around half a metre. Angles are scale-invariant, so this only makes the
-// numbers look like the metric world landmarks they stand in for.
-const WORLD_SCALE = 1.9;
+import {
+  compressionAt, idealTurn, rotateAboutSpine, compressDepth,
+  worldLandmarks, imageLandmarks, EDGE_ON_DEGREES,
+} from "./synthetic.js";
 
 // How far the turned variants stand from the view the pose *needs*, which is
 // not the same as how far they stand from the camera. A front pose wants to be
 // square to the lens; Downward Dog only exists side-on, so for it these turn
 // the body towards the camera rather than away from it.
 const TURNED_DEGREES = 30;
-const EDGE_ON_DEGREES = 80;
-const DEPTH_COMPRESSION = 0.4;
-
-// Depth loss depends on the angle to the *camera*, since that is physics rather
-// than choreography: a body square to the lens gives the landmarker plenty to
-// work with, a body edge-on gives it almost nothing.
-const compressionAt = (turnFromCamera) =>
-  1 - (1 - DEPTH_COMPRESSION) *
-      Math.min(1, Math.sin(turnFromCamera * Math.PI / 180) /
-                  Math.sin(EDGE_ON_DEGREES * Math.PI / 180));
-
-// buildReference already stands a side-view pose side-on to the camera.
-const idealTurn = (view) => (view === "side" ? 90 : 0);
 
 // Each pose's straight-leg fault: bend the shin away from the thigh, which
 // changes that knee's angle and nothing else — the hip angle is measured from
@@ -62,77 +38,6 @@ const FAULTS = {
   triangle: { side: "left" },
   downdog:  { side: "left" },
 };
-
-const NAMES = Object.keys(LM);
-const NUM_LANDMARKS = 33;
-const r5 = (n) => Math.round(n * 1e5) / 1e5;
-
-const hipCentre = (P) => ({
-  x: (P.left_hip.x + P.right_hip.x) / 2,
-  y: (P.left_hip.y + P.right_hip.y) / 2,
-  z: (P.left_hip.z + P.right_hip.z) / 2,
-});
-
-/** Rotate a figure about the vertical axis through its hips. +deg turns away. */
-function rotateAboutSpine(P, deg) {
-  const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
-  const hip = hipCentre(P);
-  const out = {};
-  for (const [name, p] of Object.entries(P)) {
-    const dx = p.x - hip.x, dz = (p.z || 0) - hip.z;
-    out[name] = { x: hip.x + dx * c + dz * s, y: p.y, z: hip.z - dx * s + dz * c };
-  }
-  return out;
-}
-
-/** Squash the depth axis toward the hip plane. Models monocular depth loss. */
-function compressDepth(P, factor) {
-  const hip = hipCentre(P);
-  const out = {};
-  for (const [name, p] of Object.entries(P)) {
-    out[name] = { x: p.x, y: p.y, z: hip.z + ((p.z || 0) - hip.z) * factor };
-  }
-  return out;
-}
-
-/**
- * World landmarks: metres, origin at the hip midpoint, y down, +z away from
- * the camera — MediaPipe's convention, which is also the rig's.
- */
-function worldLandmarks(P, visibilityOf) {
-  const hip = hipCentre(P);
-  const arr = Array.from({ length: NUM_LANDMARKS }, () => ({ x: 0, y: 0, z: 0, visibility: 0 }));
-  for (const name of NAMES) {
-    const p = P[name];
-    arr[LM[name]] = {
-      x: r5((p.x - hip.x) * WORLD_SCALE),
-      y: r5((p.y - hip.y) * WORLD_SCALE),
-      z: r5(((p.z || 0) - hip.z) * WORLD_SCALE),
-      visibility: visibilityOf(name),
-    };
-  }
-  return arr;
-}
-
-/**
- * Image landmarks: x,y normalized over the frame — an orthographic projection
- * of the same figure, which is what a camera far enough away produces — and z
- * a hip-relative depth in roughly the same scale as x.
- */
-function imageLandmarks(P, visibilityOf, displace) {
-  const hip = hipCentre(P);
-  const arr = Array.from({ length: NUM_LANDMARKS }, () => ({ x: 0, y: 0, z: 0, visibility: 0 }));
-  for (const name of NAMES) {
-    const p = displace ? displace(name, P[name]) : P[name];
-    arr[LM[name]] = {
-      x: r5(p.x),
-      y: r5(p.y),
-      z: r5((p.z || 0) - hip.z),
-      visibility: visibilityOf(name),
-    };
-  }
-  return arr;
-}
 
 const allVisible = () => 1;
 

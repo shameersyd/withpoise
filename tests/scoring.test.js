@@ -1,3 +1,4 @@
+import { readTextFile } from "./platform.js";
 import { suite, test, assert, assertEqual, assertClose, assertDeepEqual, assertSameSet } from "./harness.js";
 import {
   LM, computeAngles, matchSinglePose, reliableLandmarks, correctionsFor, calcAngle,
@@ -10,7 +11,7 @@ import { YOGA_POSES, CORRECTION_TIPS } from "./poses.js";
 suite("scoring");
 
 const POSES = Object.keys(YOGA_POSES);
-const fixture = (key) => JSON.parse(readFile(`tests/fixtures/${key}.json`));
+const fixture = (key) => JSON.parse(readTextFile(`tests/fixtures/${key}.json`));
 
 /** What the app does with one fixture variant, end to end. */
 function score(key, variantName) {
@@ -700,7 +701,7 @@ test("the video and the overlay canvas are fitted to the screen the same way", (
   // selectors are still styled as one block. Crude, and it would have caught
   // the bug.
   // Comments carry commas, which would otherwise read as selector lists.
-  const css = readFile("yoga_app/index.html").replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = readTextFile("yoga_app/index.html").replace(/\/\*[\s\S]*?\*\//g, "");
 
   // Every rule whose selector list names either element on its own.
   const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
@@ -719,8 +720,8 @@ test("the service worker precaches every module the app imports", () => {
   // of index.html, and once when the coaching modules were added. Both times
   // the symptom would have been a first offline visit loading an index.html
   // whose imports 404, which is not something a unit test would otherwise see.
-  const html = readFile("yoga_app/index.html");
-  const sw = readFile("yoga_app/sw.js");
+  const html = readTextFile("yoga_app/index.html");
+  const sw = readTextFile("yoga_app/sw.js");
 
   const imported = [...html.matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(m => m[1]);
   assert(imported.length >= 4, `expected several local imports, found ${imported.length}`);
@@ -731,7 +732,7 @@ test("the service worker precaches every module the app imports", () => {
   }
 
   // The worker's own imports ride along on the same list.
-  const workerImports = [...readFile("yoga_app/pose-worker.js")
+  const workerImports = [...readTextFile("yoga_app/pose-worker.js")
     .matchAll(/from\s+"\.\/([\w.-]+\.js)"/g)].map(m => m[1]);
   for (const file of workerImports) {
     assert(assets.includes(file), `sw.js does not precache ${file}, needed by the worker`);
@@ -742,7 +743,7 @@ test("the service worker's asset paths are relative to its own scope", () => {
   // "/index.html" is only correct at a domain root. Under a subpath — a project
   // page, a preview deploy, a shared folder — addAll rejects and takes the
   // whole install down with it, so the app never caches anything at all.
-  const sw = readFile("yoga_app/sw.js");
+  const sw = readTextFile("yoga_app/sw.js");
   const list = sw.slice(sw.indexOf("const ASSETS"), sw.indexOf("];", sw.indexOf("const ASSETS")));
   const paths = [...list.matchAll(/"([^"]+)"/g)].map(m => m[1]);
   assert(paths.length > 3, `expected an asset list, found ${paths.length} entries`);
@@ -755,7 +756,7 @@ test("the service worker's asset paths are relative to its own scope", () => {
 test("the runtime cache is versioned apart from the app shell", () => {
   // They must not share a version. The runtime cache holds a 9-30 MB model, and
   // tying it to the app version would re-download that on every deploy.
-  const sw = readFile("yoga_app/sw.js");
+  const sw = readTextFile("yoga_app/sw.js");
   const app = sw.match(/APP_CACHE\s*=\s*"([^"]+)"/);
   const runtime = sw.match(/RUNTIME_CACHE\s*=\s*"([^"]+)"/);
   assert(app && runtime, "both caches must be named");

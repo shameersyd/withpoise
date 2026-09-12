@@ -1,17 +1,22 @@
 #!/bin/sh
 # Run the test suite.
 #
-# There is no Node on this machine, so this uses JavaScriptCore's jsc shell.
-# jsc's quit() does not set an exit code, so the harness throws on failure —
-# that jsc does propagate, as exit 3.
+# Under Node if it is here, JavaScriptCore's `jsc` otherwise — the machine this
+# was written on has no Node, and jsc ships with macOS. The suite itself does
+# not care; see tests/platform.js for the three things that differ.
 set -e
 cd "$(dirname "$0")/.."
-JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc
-if [ ! -x "$JSC" ]; then
-  echo "jsc not found at $JSC — it ships with macOS inside the JavaScriptCore framework." >&2
-  exit 127
+
+if command -v node > /dev/null 2>&1; then
+  node tests/run.js
+else
+  JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc
+  if [ ! -x "$JSC" ]; then
+    echo "Need either node on the PATH or jsc at $JSC." >&2
+    exit 127
+  fi
+  "$JSC" -m tests/run.js
 fi
-"$JSC" -m tests/run.js
 
 # The suite above never loads MediaPipe, never creates a Worker and never
 # touches WebGL, so it cannot see whether pose detection actually runs — and

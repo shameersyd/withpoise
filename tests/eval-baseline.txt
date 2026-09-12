@@ -1,0 +1,90 @@
+
+  Spatial evaluation — synthetic bodies, exact by construction
+  Every fault below preserves all eight scored joint angles.
+
+  pose      fault         sev    score   cover  top correction
+  ──────────────────────────────────────────────────────────────────────────────
+  mountain  none            —    100.0    100%  —
+  mountain  valgus         15    100.0    100%  —
+  mountain  valgus         30    100.0    100%  —
+  mountain  valgus         45    100.0    100%  —
+  mountain  valgus         60    100.0    100%  —
+  mountain  pelvisYaw      15    100.0    100%  —
+  mountain  pelvisYaw      30    100.0    100%  —
+  mountain  pelvisYaw      45    100.0    100%  —
+  mountain  armSwing       30    100.0    100%  —
+  mountain  armSwing       45    100.0    100%  —
+  mountain  armSwing       90    100.0    100%  —
+  mountain  depthMirror     —    100.0    100%  —
+  mountain  noise           —     99.7    100%  Open your left hip more
+
+  warrior1  none            —    100.0    100%  —
+  warrior1  valgus         15    100.0    100%  —
+  warrior1  valgus         30    100.0    100%  —
+  warrior1  valgus         45    100.0    100%  —
+  warrior1  valgus         60    100.0    100%  —
+  warrior1  pelvisYaw      15    100.0    100%  —
+  warrior1  pelvisYaw      30    100.0    100%  —
+  warrior1  pelvisYaw      45    100.0    100%  —
+  warrior1  armSwing       30    100.0    100%  —
+  warrior1  armSwing       45    100.0    100%  —
+  warrior1  armSwing       90    100.0    100%  —
+  warrior1  depthMirror     —    100.0    100%  —
+  warrior1  noise           —    100.0    100%  —
+
+  warrior2  none            —    100.0    100%  —
+  warrior2  valgus         15    100.0    100%  —
+  warrior2  valgus         30    100.0    100%  —
+  warrior2  valgus         45    100.0    100%  —
+  warrior2  valgus         60    100.0    100%  —
+  warrior2  pelvisYaw      15    100.0    100%  —
+  warrior2  pelvisYaw      30    100.0    100%  —
+  warrior2  pelvisYaw      45    100.0     63%  —
+  warrior2  armSwing       30    100.0    100%  —
+  warrior2  armSwing       45    100.0     81%  —
+  warrior2  armSwing       90    100.0     81%  —
+  warrior2  depthMirror     —    100.0    100%  —
+  warrior2  noise           —    100.0    100%  —
+
+  tree      none            —    100.0    100%  —
+  tree      valgus         15    100.0    100%  —
+  tree      valgus         30    100.0    100%  —
+  tree      valgus         45    100.0    100%  —
+  tree      valgus         60    100.0    100%  —
+  tree      pelvisYaw      15    100.0    100%  —
+  tree      pelvisYaw      30    100.0    100%  —
+  tree      pelvisYaw      45    100.0    100%  —
+  tree      armSwing       30    100.0    100%  —
+  tree      armSwing       45    100.0    100%  —
+  tree      armSwing       90    100.0    100%  —
+  tree      depthMirror     —    100.0    100%  —
+  tree      noise           —     99.6    100%  Open your left hip more
+
+  downdog   none            —    100.0    100%  —
+  downdog   valgus         15    100.0    100%  —
+  downdog   valgus         30    100.0    100%  —
+  downdog   valgus         45    100.0    100%  —
+  downdog   valgus         60    100.0    100%  —
+  downdog   pelvisYaw      15    100.0    100%  —
+  downdog   pelvisYaw      30    100.0    100%  —
+  downdog   pelvisYaw      45    100.0    100%  —
+  downdog   armSwing       30    100.0    100%  —
+  downdog   armSwing       45    100.0    100%  —
+  downdog   armSwing       90     87.5    100%  Raise your left arm
+  downdog   depthMirror     —    100.0    100%  —
+  downdog   noise           —    100.0    100%  —
+
+  triangle  none            —    100.0    100%  —
+  triangle  valgus         15    100.0    100%  —
+  triangle  valgus         30    100.0    100%  —
+  triangle  valgus         45    100.0    100%  —
+  triangle  valgus         60    100.0    100%  —
+  triangle  pelvisYaw      15    100.0    100%  —
+  triangle  pelvisYaw      30    100.0    100%  —
+  triangle  pelvisYaw      45    100.0     35%  —
+  triangle  armSwing       30    100.0    100%  —
+  triangle  armSwing       45    100.0    100%  —
+  triangle  armSwing       90     99.4    100%  Raise your left arm
+  triangle  depthMirror     —    100.0    100%  —
+  triangle  noise           —    100.0    100%  —
+
